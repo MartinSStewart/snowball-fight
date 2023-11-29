@@ -1,12 +1,8 @@
 module Types exposing
-    ( BackendError(..)
-    , BackendModel
+    ( BackendModel
     , BackendMsg(..)
-    , BackendUserData
-    , BackendUserType(..)
     , ContextMenu
     , CssPixels
-    , EmailResult(..)
     , FrontendLoaded
     , FrontendLoading
     , FrontendModel
@@ -14,15 +10,12 @@ module Types exposing
     , FrontendMsg
     , FrontendMsg_(..)
     , Hover(..)
-    , HumanUserData
-    , Invite
     , LoadedLocalModel_
     , LoadingData_
     , LoadingLocalModel(..)
     , LoginError(..)
     , MouseButtonState(..)
     , Page(..)
-    , Person
     , RemovedTileParticle
     , SubmitStatus(..)
     , ToBackend(..)
@@ -38,8 +31,8 @@ module Types exposing
 
 import AdminPage
 import Animal exposing (Animal)
-import Array exposing (Array)
 import AssocList
+import AssocSet
 import Audio
 import Bounds exposing (Bounds)
 import Browser
@@ -48,17 +41,14 @@ import Color exposing (Colors)
 import Coord exposing (Coord, RawCellCoord)
 import Cursor exposing (Cursor, CursorMeshes)
 import Dict exposing (Dict)
-import DisplayName exposing (DisplayName)
 import Duration exposing (Duration)
 import Effect.Browser.Navigation
 import Effect.File exposing (File)
-import Effect.Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time
 import Effect.WebGL.Texture exposing (Texture)
 import EmailAddress exposing (EmailAddress)
 import Grid exposing (Grid, GridData)
-import GridCell exposing (BackendHistory)
 import Html.Events.Extra.Mouse exposing (Button)
 import Html.Events.Extra.Wheel
 import Id exposing (AnimalId, EventId, Id, MailId, OneTimePasswordId, PersonId, SecretId, TrainId, UserId)
@@ -69,27 +59,21 @@ import List.Nonempty exposing (Nonempty)
 import LocalGrid exposing (LocalGrid)
 import LocalModel exposing (LocalModel)
 import MailEditor exposing (BackendMail, FrontendMail)
-import PersonName exposing (PersonName)
 import PingData exposing (PingData)
 import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
-import Postmark exposing (PostmarkSendResponse)
 import Route exposing (InviteToken, LoginOrInviteToken, LoginToken, PageRoute)
-import Set exposing (Set)
 import Shaders exposing (DebrisVertex)
 import Sound exposing (Sound)
 import Sprite exposing (Vertex)
 import TextInput
 import TextInputMultiline
 import Tile exposing (Category, Tile, TileGroup)
-import TileCountBot
 import Time
-import TimeOfDay exposing (TimeOfDay)
 import Tool exposing (Tool)
 import Train exposing (Train)
 import Ui
 import Units exposing (CellUnit, WorldUnit)
-import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (FrontendUser, InviteTree)
 import WebGL
@@ -369,99 +353,8 @@ type UiHover
 
 
 type alias BackendModel =
-    { grid : Grid BackendHistory
-    , userSessions :
-        Dict
-            Lamdera.SessionId
-            { clientIds : AssocList.Dict ClientId (List (Bounds CellUnit))
-            , userId : Maybe (Id UserId)
-            }
-    , users : IdDict UserId BackendUserData
-    , secretLinkCounter : Int
-    , errors : List ( Effect.Time.Posix, BackendError )
-    , trains : IdDict TrainId Train
-    , animals : IdDict AnimalId Animal
-    , people : IdDict PersonId Person
-    , lastWorldUpdateTrains : IdDict TrainId Train
-    , lastWorldUpdate : Maybe Effect.Time.Posix
-    , mail : IdDict MailId BackendMail
-    , pendingLoginTokens :
-        AssocList.Dict
-            (SecretId LoginToken)
-            { requestTime : Effect.Time.Posix
-            , userId : Id UserId
-            }
-    , pendingOneTimePasswords :
-        AssocList.Dict
-            SessionId
-            { requestTime : Effect.Time.Posix
-            , userId : Id UserId
-            , loginAttempts : Int
-            , oneTimePassword : SecretId OneTimePasswordId
-            }
-    , invites : AssocList.Dict (SecretId InviteToken) Invite
-    , lastCacheRegeneration : Maybe Effect.Time.Posix
-    , reported : IdDict UserId (Nonempty BackendReport)
-    , isGridReadOnly : Bool
-    , trainsAndAnimalsDisabled : AreTrainsAndAnimalsDisabled
-    , lastReportEmailToAdmin : Maybe Effect.Time.Posix
-    , worldUpdateDurations : Array Duration
-    , tileCountBot : Maybe TileCountBot.Model
-    }
-
-
-type alias Person =
-    { name : PersonName
-    , home : Coord WorldUnit
-    , position : Point2d WorldUnit WorldUnit
-    }
-
-
-type alias Invite =
-    { invitedBy : Id UserId
-    , invitedAt : Time.Posix
-    , invitedEmailAddress : EmailAddress
-    , emailResult : EmailResult
-    }
-
-
-type EmailResult
-    = EmailSending
-    | EmailSendFailed Effect.Http.Error
-    | EmailSent Postmark.PostmarkSendResponse
-
-
-type BackendError
-    = PostmarkError EmailAddress Effect.Http.Error
-    | UserNotFoundWhenLoggingIn (Id UserId)
-
-
-type alias BackendUserData =
-    { undoHistory : List (Dict RawCellCoord Int)
-    , redoHistory : List (Dict RawCellCoord Int)
-    , undoCurrent : Dict RawCellCoord Int
-    , mailDrafts : IdDict UserId (List MailEditor.Content)
-    , cursor : Maybe Cursor
-    , handColor : Colors
-    , userType : BackendUserType
-    , name : DisplayName
-    }
-
-
-type BackendUserType
-    = HumanUser HumanUserData
-    | BotUser
-
-
-type alias HumanUserData =
-    { emailAddress : EmailAddress
-    , acceptedInvites : IdDict UserId ()
-    , timeOfDay : TimeOfDay
-    , tileHotkeys : AssocList.Dict Change.TileHotkey TileGroup
-    , showNotifications : Bool
-    , notificationsClearedAt : Effect.Time.Posix
-    , allowEmailNotifications : Bool
-    , hyperlinksVisited : Set String
+    { userSessions : Dict Lamdera.SessionId { clientIds : AssocSet.Set ClientId, userId : Id UserId }
+    , userIdCounter : Int
     }
 
 
@@ -506,57 +399,24 @@ type FrontendMsg_
 
 
 type ToBackend
-    = ConnectToBackend (Bounds CellUnit) (Maybe LoginOrInviteToken)
-    | GridChange (Nonempty ( Id EventId, Change.LocalChange ))
+    = ConnectToBackend
     | PingRequest
-    | SendLoginEmailRequest (Untrusted EmailAddress)
-    | SendInviteEmailRequest (Untrusted EmailAddress)
-    | PostOfficePositionRequest
-    | ResetTileBotRequest
-    | LoginAttemptRequest (SecretId OneTimePasswordId)
 
 
 type BackendMsg
     = UserDisconnected SessionId ClientId
     | UserConnected ClientId
-    | SentLoginEmail Effect.Time.Posix EmailAddress (Result Effect.Http.Error PostmarkSendResponse)
     | UpdateFromFrontend SessionId ClientId ToBackend Effect.Time.Posix
-    | WorldUpdateTimeElapsed Effect.Time.Posix
-    | SentInviteEmail (SecretId InviteToken) (Result Effect.Http.Error PostmarkSendResponse)
-    | CheckConnectionTimeElapsed
-    | SentMailNotification Effect.Time.Posix EmailAddress (Result Effect.Http.Error PostmarkSendResponse)
-    | SentReportVandalismAdminEmail Effect.Time.Posix EmailAddress (Result Effect.Http.Error PostmarkSendResponse)
-    | GotTimeAfterWorldUpdate Effect.Time.Posix Effect.Time.Posix
-    | TileCountBotUpdate Effect.Time.Posix
 
 
 type ToFrontend
     = LoadingData LoadingData_
     | ChangeBroadcast (Nonempty Change)
     | PingResponse Effect.Time.Posix
-    | SendLoginEmailResponse EmailAddress
-    | SendInviteEmailResponse EmailAddress
-    | PostOfficePositionResponse (Maybe (Coord WorldUnit))
     | ClientConnected
     | CheckConnectionBroadcast
-    | LoginAttemptResponse LoginError
-
-
-type LoginError
-    = OneTimePasswordExpiredOrTooManyAttempts
-    | WrongOneTimePassword (SecretId OneTimePasswordId)
 
 
 type alias LoadingData_ =
-    { grid : GridData
-    , userStatus : UserStatus
-    , viewBounds : Bounds CellUnit
-    , trains : IdDict TrainId Train
-    , mail : IdDict MailId FrontendMail
-    , cows : IdDict AnimalId Animal
-    , cursors : IdDict UserId Cursor
-    , users : IdDict UserId FrontendUser
-    , inviteTree : InviteTree
-    , isGridReadOnly : Bool
-    , trainsDisabled : AreTrainsAndAnimalsDisabled
+    { users : List (Id UserId)
     }

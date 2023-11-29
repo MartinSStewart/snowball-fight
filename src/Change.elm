@@ -50,34 +50,8 @@ type Change
 
 
 type LocalChange
-    = LocalGridChange Grid.LocalGridChange
-    | LocalUndo
-    | LocalRedo
-    | LocalAddUndo
-    | PickupAnimal (Id AnimalId) (Point2d WorldUnit WorldUnit) Effect.Time.Posix
-    | DropAnimal (Id AnimalId) (Point2d WorldUnit WorldUnit) Effect.Time.Posix
-    | MoveCursor (Point2d WorldUnit WorldUnit)
+    = SelectCharacter
     | InvalidChange
-    | ChangeHandColor Colors
-    | ToggleRailSplit (Coord WorldUnit)
-    | ChangeDisplayName DisplayName
-    | SubmitMail { content : List MailEditor.Content, to : Id UserId }
-    | UpdateDraft { content : List MailEditor.Content, to : Id UserId }
-    | TeleportHomeTrainRequest (Id TrainId) Effect.Time.Posix
-    | LeaveHomeTrainRequest (Id TrainId) Effect.Time.Posix
-    | ViewedMail (Id MailId)
-    | SetAllowEmailNotifications Bool
-    | ChangeTool Cursor.OtherUsersTool
-    | AdminChange AdminChange
-    | ReportVandalism Report
-    | RemoveReport (Coord WorldUnit)
-    | SetTimeOfDay TimeOfDay
-    | SetTileHotkey TileHotkey TileGroup
-    | ShowNotifications Bool
-    | Logout
-    | ViewBoundsChange ViewBoundsChange2
-    | ClearNotifications Effect.Time.Posix
-    | VisitedHyperlink Hyperlink
 
 
 type alias ViewBoundsChange2 =
