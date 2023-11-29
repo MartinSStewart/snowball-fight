@@ -8,14 +8,12 @@ module Toolbar exposing
     , mapSize
     , notificationsViewWidth
     , offsetViewPoint
-    , oneTimePasswordTextScale
     , screenToWorld
     , toolbarTileGroupsMaxPerPage
     , validateInviteEmailAddress
     , view
     )
 
-import AdminPage
 import AssocList
 import Change exposing (AreTrainsAndAnimalsDisabled(..), LoggedIn_, UserStatus(..))
 import Color exposing (Color, Colors)
@@ -41,7 +39,6 @@ import Quantity exposing (Quantity(..), Rate)
 import Shaders
 import Sound
 import Sprite
-import String.Nonempty
 import StringExtra
 import TextInput
 import TextInputMultiline
@@ -49,10 +46,9 @@ import Tile exposing (Category(..), DefaultColor(..), Tile(..), TileData, TileGr
 import TimeOfDay exposing (TimeOfDay(..))
 import Tool exposing (Tool(..))
 import Train
-import Types exposing (ContextMenu, FrontendLoaded, Hover(..), LoginError(..), MouseButtonState(..), Page(..), SubmitStatus(..), ToolButton(..), TopMenu(..), UiHover(..), ViewPoint(..))
+import Types exposing (ContextMenu, FrontendLoaded, Hover(..), MouseButtonState(..), SubmitStatus(..), ToolButton(..), TopMenu(..), UiHover(..), ViewPoint(..))
 import Ui exposing (BorderAndFill(..))
 import Units exposing (WorldUnit)
-import Unsafe
 import User
 import Vector2d exposing (Vector2d)
 
@@ -72,70 +68,7 @@ view model hover =
                 (round (toFloat cssWindowWidth * model.devicePixelRatio))
                 (round (toFloat cssWindowHeight * model.devicePixelRatio))
     in
-    case ( localModel.userStatus, model.page ) of
-        ( LoggedIn loggedIn, MailPage mailEditor ) ->
-            MailEditor.ui
-                (isDisconnected model)
-                windowSize
-                MailEditorHover
-                localModel.users
-                loggedIn.inbox
-                mailEditor
-
-        ( LoggedIn loggedIn, AdminPage adminPage ) ->
-            case loggedIn.adminData of
-                Just adminData ->
-                    AdminPage.adminView
-                        AdminHover
-                        windowSize
-                        loggedIn.isGridReadOnly
-                        adminData
-                        adminPage
-                        localModel
-
-                Nothing ->
-                    normalView windowSize model hover
-
-        ( _, InviteTreePage ) ->
-            Ui.el
-                { padding = Ui.noPadding
-                , borderAndFill = Ui.defaultElBorderAndFill
-                , inFront =
-                    [ Ui.bottomLeft
-                        { size = windowSize }
-                        (Ui.el
-                            { padding = Ui.paddingXY 16 16, inFront = [], borderAndFill = NoBorderOrFill }
-                            (Ui.button
-                                { id = CloseInviteTreeButton
-                                , padding = Ui.paddingXY 10 4
-                                }
-                                (Ui.text "Close")
-                            )
-                        )
-                    ]
-                }
-                (Ui.topLeft
-                    { size = windowSize }
-                    (Ui.column
-                        { spacing = 12, padding = Ui.paddingXY 16 16 }
-                        [ Ui.scaledText 3 "All users"
-                        , User.drawInviteTree
-                            (case localModel.userStatus of
-                                LoggedIn loggedIn ->
-                                    Just loggedIn.userId
-
-                                NotLoggedIn _ ->
-                                    Nothing
-                            )
-                            localModel.cursors
-                            localModel.users
-                            localModel.inviteTree
-                        ]
-                    )
-                )
-
-        _ ->
-            normalView windowSize model hover
+    normalView windowSize model hover
 
 
 easterEgg : List (Ui.Element id)
@@ -205,65 +138,9 @@ normalView windowSize model hover =
                 )
                 (IdDict.toList localModel.cursors)
 
-        otherUsersOnline =
-            case localModel.userStatus of
-                LoggedIn { userId } ->
-                    IdDict.remove userId localModel.cursors |> IdDict.size
-
-                NotLoggedIn _ ->
-                    IdDict.size localModel.cursors
-
         localModel : LocalGrid.LocalGrid_
         localModel =
             LocalGrid.localModel model.localModel
-
-        toolbarElement : Ui.Element UiHover
-        toolbarElement =
-            if model.hideUi then
-                Ui.none
-
-            else
-                Ui.el
-                    { padding = Ui.noPadding
-                    , inFront = easterEgg
-                    , borderAndFill = Ui.defaultElBorderAndFill
-                    }
-                    (case localModel.userStatus of
-                        LoggedIn loggedIn ->
-                            toolbarUi
-                                (case IdDict.get loggedIn.userId localModel.users of
-                                    Just user ->
-                                        user.handColor
-
-                                    Nothing ->
-                                        Cursor.defaultColors
-                                )
-                                loggedIn
-                                model
-                                (case model.currentTool of
-                                    HandTool ->
-                                        HandToolButton
-
-                                    TilePlacerTool { tileGroup } ->
-                                        TilePlacerToolButton tileGroup
-
-                                    TilePickerTool ->
-                                        TilePickerToolButton
-
-                                    TextTool _ ->
-                                        TextToolButton
-
-                                    ReportTool ->
-                                        ReportToolButton
-                                )
-
-                        NotLoggedIn _ ->
-                            loginToolbarUi
-                                model.pressedSubmitEmail
-                                model.loginEmailInput
-                                model.oneTimePasswordInput
-                                model.loginError
-                    )
 
         maybeHyperlink =
             case hover of
@@ -298,10 +175,10 @@ normalView windowSize model hover =
     Ui.bottomCenter
         { size = windowSize
         , inFront =
-            (if model.hideUi then
+            if model.hideUi then
                 []
 
-             else
+            else
                 [ case maybeHyperlink of
                     Just hyperlink ->
                         Ui.bottomLeft
@@ -313,12 +190,6 @@ normalView windowSize model hover =
                                 }
                                 (Ui.text (Hyperlink.toUrl hyperlink))
                             )
-
-                    Nothing ->
-                        Ui.none
-                , case model.contextMenu of
-                    Just contextMenu ->
-                        contextMenuView (Ui.size toolbarElement |> Coord.yRaw) contextMenu model
 
                     Nothing ->
                         Ui.none
@@ -353,37 +224,6 @@ normalView windowSize model hover =
 
                                 NotLoggedIn _ ->
                                     Ui.none
-                            , if model.showOnlineUsers then
-                                Ui.topRight
-                                    { size = model.windowSize }
-                                    (Ui.el
-                                        { padding = Ui.paddingXY 8 8, inFront = [], borderAndFill = Ui.defaultElBorderAndFill }
-                                        (Ui.column
-                                            { spacing = 16, padding = Ui.noPadding }
-                                            [ onlineUsersButton otherUsersOnline model
-                                            , if List.isEmpty onlineUsers then
-                                                Ui.el
-                                                    { padding = Ui.paddingXY 8 0
-                                                    , inFront = []
-                                                    , borderAndFill = NoBorderOrFill
-                                                    }
-                                                    (Ui.text "Nobody is here")
-
-                                              else
-                                                Ui.column
-                                                    { spacing = 8, padding = Ui.noPadding }
-                                                    onlineUsers
-                                            , Ui.button
-                                                { id = ShowInviteTreeButton
-                                                , padding = Ui.paddingXY 10 4
-                                                }
-                                                (Ui.text "Show all")
-                                            ]
-                                        )
-                                    )
-
-                              else
-                                onlineUsersButton otherUsersOnline model
                             ]
                         )
                 , Ui.row
@@ -462,40 +302,8 @@ normalView windowSize model hover =
                             Ui.none
                     ]
                 ]
-            )
-                ++ (case model.page of
-                        WorldPage worldPage ->
-                            if worldPage.showMap then
-                                [ let
-                                    mapSize2 =
-                                        mapSize model.windowSize
-                                  in
-                                  Ui.el
-                                    { padding =
-                                        { topLeft = Coord.xy mapSize2 mapSize2 |> Coord.plus (Coord.xy 16 16)
-                                        , bottomRight = Coord.origin
-                                        }
-                                    , borderAndFill =
-                                        BorderAndFill
-                                            { borderWidth = 2
-                                            , borderColor = Color.outlineColor
-                                            , fillColor = Color.fillColor
-                                            }
-                                    , inFront = []
-                                    }
-                                    Ui.none
-                                    |> Ui.ignoreInputs
-                                    |> Ui.center { size = model.windowSize }
-                                ]
-
-                            else
-                                []
-
-                        _ ->
-                            []
-                   )
         }
-        toolbarElement
+        Ui.none
 
 
 onlineUsersButton : Int -> { a | showOnlineUsers : Bool } -> Ui.Element UiHover
@@ -1006,81 +814,6 @@ validateInviteEmailAddress emailAddress inviteEmailAddressText =
             Err "Invalid email"
 
 
-inviteView : EmailAddress -> TextInput.Model -> SubmitStatus EmailAddress -> Ui.Element UiHover
-inviteView emailAddress inviteTextInput inviteSubmitStatus =
-    let
-        inviteForm : Ui.Element UiHover
-        inviteForm =
-            Ui.column
-                { spacing = 8, padding = Ui.paddingXY 16 16 }
-                [ Ui.button
-                    { id = CloseInviteUser, padding = Ui.paddingXY 10 4 }
-                    (Ui.text "Cancel")
-                , content
-                ]
-
-        content : Ui.Element UiHover
-        content =
-            Ui.column
-                { spacing = 0, padding = Ui.noPadding }
-                [ Ui.column
-                    { spacing = 0, padding = Ui.noPadding }
-                    [ Ui.text "Enter email address to send an invite to"
-                    , Ui.textInput
-                        { id = InviteEmailAddressTextInput
-                        , width = Coord.xRaw toolbarUiSize |> (+) (-16 * 2)
-                        , isValid = True
-                        , state = inviteTextInput.current
-                        }
-                    ]
-                , Ui.row
-                    { spacing = 4, padding = { topLeft = Coord.xy 0 8, bottomRight = Coord.origin } }
-                    [ Ui.button
-                        { id = SubmitInviteUser, padding = Ui.paddingXY 10 4 }
-                        (case inviteSubmitStatus of
-                            NotSubmitted _ ->
-                                Ui.text "Send invite"
-
-                            Submitting ->
-                                Ui.text "Submitting "
-
-                            Submitted _ ->
-                                Ui.text "Submitting "
-                        )
-                    , case
-                        ( pressedSubmit inviteSubmitStatus
-                        , validateInviteEmailAddress emailAddress inviteTextInput.current.text
-                        )
-                      of
-                        ( True, Err error ) ->
-                            Ui.el
-                                { padding = Ui.paddingXY 4 4, inFront = [], borderAndFill = NoBorderOrFill }
-                                (Ui.colorText Color.errorColor error)
-
-                        _ ->
-                            Ui.none
-                    ]
-                ]
-    in
-    case inviteSubmitStatus of
-        Submitted inviteEmailAddress ->
-            Ui.column
-                { spacing = 0, padding = Ui.paddingXY 16 16 }
-                [ Ui.button
-                    { id = CloseInviteUser, padding = Ui.paddingXY 10 4 }
-                    (Ui.text "Close")
-                , Ui.center
-                    { size = Ui.size content }
-                    (Ui.wrappedText
-                        (Ui.size content |> Coord.xRaw |> (+) -16)
-                        ("An invite email as been sent to " ++ EmailAddress.toString inviteEmailAddress)
-                    )
-                ]
-
-        _ ->
-            inviteForm
-
-
 pressedSubmit : SubmitStatus a -> Bool
 pressedSubmit submitStatus =
     case submitStatus of
@@ -1089,347 +822,6 @@ pressedSubmit submitStatus =
 
         _ ->
             False
-
-
-loginToolbarUi :
-    SubmitStatus EmailAddress
-    -> TextInput.Model
-    -> TextInput.Model
-    -> Maybe LoginError
-    -> Ui.Element UiHover
-loginToolbarUi pressedSubmitEmail emailTextInput oneTimePasswordInput maybeLoginError =
-    let
-        pressedSubmit2 =
-            pressedSubmit pressedSubmitEmail
-
-        loginUi : Ui.Element UiHover
-        loginUi =
-            Ui.column
-                { spacing = 10, padding = Ui.paddingXY 20 10 }
-                [ Ui.text "Enter your email address and we'll send a login link"
-                , Ui.column
-                    { spacing = 6, padding = Ui.noPadding }
-                    [ Ui.row
-                        { spacing = 10, padding = Ui.noPadding }
-                        [ Ui.textInput
-                            { id = EmailAddressTextInputHover
-                            , width = 780
-                            , isValid =
-                                if pressedSubmit2 then
-                                    EmailAddress.fromString emailTextInput.current.text /= Nothing
-
-                                else
-                                    True
-                            , state = emailTextInput.current
-                            }
-                        , Ui.button
-                            { id = SendEmailButtonHover, padding = Ui.paddingXY 30 4 }
-                            (Ui.text "Send email")
-                        ]
-                    , case pressedSubmitEmail of
-                        NotSubmitted a ->
-                            if a.pressedSubmit then
-                                case EmailAddress.fromString emailTextInput.current.text of
-                                    Just _ ->
-                                        Ui.text ""
-
-                                    Nothing ->
-                                        Ui.colorText Color.errorColor "Invalid email address"
-
-                            else
-                                Ui.text ""
-
-                        Submitting ->
-                            Ui.text "Sending..."
-
-                        Submitted _ ->
-                            Ui.text ""
-                    ]
-                , Ui.wrappedText 1000 "If you don't have an account you'll need to be invited by an existing player."
-                ]
-    in
-    case pressedSubmitEmail of
-        Submitted emailAddress ->
-            let
-                loginExpired =
-                    Ui.colorText Color.errorColor "Login expired, refresh the page to retry"
-
-                centerHorizontally item =
-                    Ui.centerHorizontally { parentWidth = Ui.size loginExpired |> Coord.xRaw } item
-
-                ( isValid, statusUi ) =
-                    case maybeLoginError of
-                        Just (WrongOneTimePassword code) ->
-                            if Id.secretToString code == oneTimePasswordInput.current.text then
-                                ( False, Ui.colorText Color.errorColor "Wrong code" |> centerHorizontally )
-
-                            else if String.length oneTimePasswordInput.current.text == Id.oneTimePasswordLength then
-                                ( True, Ui.text "Sending..." |> centerHorizontally )
-
-                            else
-                                ( True, Ui.none )
-
-                        Just OneTimePasswordExpiredOrTooManyAttempts ->
-                            ( False, loginExpired )
-
-                        Nothing ->
-                            ( True
-                            , if String.length oneTimePasswordInput.current.text == Id.oneTimePasswordLength then
-                                Ui.text "Sending..." |> centerHorizontally
-
-                              else
-                                Ui.none
-                            )
-
-                submittedText : Ui.Element UiHover
-                submittedText =
-                    Ui.column
-                        { spacing = 8, padding = Ui.noPadding }
-                        [ "Login email sent to "
-                            ++ EmailAddress.toString emailAddress
-                            |> Ui.wrappedText 1000
-                            |> centerHorizontally
-                        , Ui.column
-                            { spacing = 4, padding = Ui.noPadding }
-                            [ Ui.text "Please type in the code you received" |> centerHorizontally
-                            , Ui.textInputScaled
-                                { id = OneTimePasswordInput
-                                , width = 252
-                                , textScale = oneTimePasswordTextScale
-                                , isValid = isValid
-                                , state = oneTimePasswordInput.current
-                                }
-                                |> centerHorizontally
-                            , statusUi
-                            ]
-                        ]
-
-                topPadding =
-                    16
-            in
-            Ui.el
-                { padding = { topLeft = Coord.xy 0 topPadding, bottomRight = Coord.origin }
-                , inFront = []
-                , borderAndFill = Ui.defaultElBorderAndFill
-                }
-                (Ui.topCenter { size = Ui.size loginUi |> Coord.minus (Coord.xy 0 topPadding) } submittedText)
-
-        _ ->
-            loginUi
-
-
-oneTimePasswordTextScale : number
-oneTimePasswordTextScale =
-    4
-
-
-dummyEmail : EmailAddress
-dummyEmail =
-    Unsafe.emailAddress "a@a.se"
-
-
-toolbarUiSize : Coord Pixels
-toolbarUiSize =
-    toolbarUi
-        { primaryColor = Color.black, secondaryColor = Color.black }
-        { tileHotkeys = AssocList.empty, emailAddress = dummyEmail }
-        { page = WorldPage { showMap = False, showInvite = False }
-        , hasCmdKey = False
-        , tileColors = AssocList.empty
-        , selectedTileCategory = Scenery
-        , tileCategoryPageIndex = AssocList.empty
-        , primaryColorTextInput = TextInput.init
-        , secondaryColorTextInput = TextInput.init
-        , inviteTextInput = TextInput.init
-        , inviteSubmitStatus = NotSubmitted { pressedSubmit = False }
-        , hyperlinkInput = TextInputMultiline.init
-        }
-        HandToolButton
-        |> Ui.size
-
-
-toolbarUi :
-    Colors
-    -> { a | tileHotkeys : AssocList.Dict Change.TileHotkey TileGroup, emailAddress : EmailAddress }
-    ->
-        { b
-            | page : Page
-            , hasCmdKey : Bool
-            , tileColors : AssocList.Dict TileGroup Colors
-            , selectedTileCategory : Category
-            , tileCategoryPageIndex : AssocList.Dict Category Int
-            , primaryColorTextInput : TextInput.Model
-            , secondaryColorTextInput : TextInput.Model
-            , inviteTextInput : TextInput.Model
-            , inviteSubmitStatus : SubmitStatus EmailAddress
-            , hyperlinkInput : TextInputMultiline.Model
-        }
-    -> ToolButton
-    -> Ui.Element UiHover
-toolbarUi handColor loggedIn model currentToolButton =
-    let
-        showInvite =
-            case model.page of
-                WorldPage worldPage ->
-                    worldPage.showInvite
-
-                _ ->
-                    False
-    in
-    if showInvite then
-        inviteView loggedIn.emailAddress model.inviteTextInput model.inviteSubmitStatus
-
-    else
-        Ui.row
-            { spacing = 4, padding = Ui.noPadding }
-            [ Ui.column
-                { spacing = 4, padding = Ui.noPadding }
-                [ Ui.row
-                    { spacing = 4, padding = Ui.noPadding }
-                    [ Ui.button { id = ZoomInButton, padding = smallToolButtonPadding } zoomInSprite
-                    , Ui.button { id = ZoomOutButton, padding = smallToolButtonPadding } zoomOutSprite
-                    ]
-                , Ui.row
-                    { spacing = 4, padding = Ui.noPadding }
-                    [ Ui.customButton
-                        { id = RotateLeftButton
-                        , padding = smallToolButtonPadding
-                        , inFront = hotkeyTextOverlay (Coord.xy 56 56) "q"
-                        , borderAndFill = Ui.defaultButtonBorderAndFill
-                        , borderAndFillFocus = Ui.defaultButtonBorderAndFillFocus
-                        }
-                        rotateLeftSprite
-                    , Ui.customButton
-                        { id = RotateRightButton
-                        , padding = smallToolButtonPadding
-                        , inFront = hotkeyTextOverlay (Coord.xy 56 56) "w"
-                        , borderAndFill = Ui.defaultButtonBorderAndFill
-                        , borderAndFillFocus = Ui.defaultButtonBorderAndFillFocus
-                        }
-                        rotateRightSprite
-                    ]
-                , Ui.row
-                    { spacing = 4, padding = Ui.noPadding }
-                    [ Ui.customButton
-                        { id = ShowMapButton
-                        , padding = smallToolButtonPadding
-                        , inFront = hotkeyTextOverlay (Coord.xy 56 56) "m"
-                        , borderAndFill =
-                            BorderAndFill
-                                { borderWidth = 2
-                                , borderColor = Color.outlineColor
-                                , fillColor =
-                                    case model.page of
-                                        WorldPage worldPage ->
-                                            if worldPage.showMap then
-                                                Color.highlightColor
-
-                                            else
-                                                Color.fillColor2
-
-                                        _ ->
-                                            Color.fillColor2
-                                }
-                        , borderAndFillFocus =
-                            BorderAndFill
-                                { borderWidth = 2
-                                , borderColor = Color.focusedUiColor
-                                , fillColor =
-                                    case model.page of
-                                        WorldPage worldPage ->
-                                            if worldPage.showMap then
-                                                Color.highlightColor
-
-                                            else
-                                                Color.fillColor2
-
-                                        _ ->
-                                            Color.fillColor2
-                                }
-                        }
-                        mapSprite
-                    , Ui.selectableButton
-                        { id = ToolButtonHover ReportToolButton
-                        , padding = smallToolButtonPadding
-                        }
-                        (currentToolButton == ReportToolButton)
-                        Cursor.gavelCursor2
-                    ]
-                , Ui.row
-                    { spacing = 4, padding = Ui.noPadding }
-                    [ Ui.button
-                        { id = ShowInviteUser
-                        , padding = smallToolButtonPadding
-                        }
-                        inviteUserSprite
-                    ]
-                ]
-            , List.map
-                (toolButtonUi model.hasCmdKey handColor model.tileColors loggedIn.tileHotkeys currentToolButton)
-                [ HandToolButton
-                , TilePickerToolButton
-                , TextToolButton
-                , TilePlacerToolButton EmptyTileGroup
-                , TilePlacerToolButton HyperlinkGroup
-                ]
-                |> List.greedyGroupsOf toolbarRowCount
-                |> List.map (Ui.column { spacing = 2, padding = Ui.noPadding })
-                |> Ui.row { spacing = 2, padding = Ui.noPadding }
-            , Ui.column
-                { spacing = -2
-                , padding = { topLeft = Coord.xy 0 -38, bottomRight = Coord.xy 0 0 }
-                }
-                [ List.map
-                    (\category ->
-                        let
-                            text =
-                                Tile.categoryToString category
-                        in
-                        Ui.selectableButton
-                            { id = CategoryButton category
-                            , padding = Ui.paddingXY 6 2
-                            }
-                            (model.selectedTileCategory == category)
-                            (Ui.row
-                                { spacing = 0, padding = Ui.noPadding }
-                                [ Ui.underlinedText (String.fromChar (String.Nonempty.head text))
-                                , Ui.text (String.Nonempty.tail text)
-                                ]
-                            )
-                    )
-                    Tile.allCategories
-                    |> Ui.row { spacing = 4, padding = Ui.noPadding }
-                , let
-                    pageIndex : Int
-                    pageIndex =
-                        case AssocList.get model.selectedTileCategory model.tileCategoryPageIndex of
-                            Just index ->
-                                index
-
-                            Nothing ->
-                                0
-
-                    ( tileGroups, remainingTileGroups ) =
-                        List.drop
-                            (pageIndex * toolbarTileGroupsMaxPerPage)
-                            (Tile.categoryToTiles model.selectedTileCategory)
-                            |> List.splitAt toolbarTileGroupsMaxPerPage
-
-                    content =
-                        toolbarTileGroups tileGroups loggedIn.tileHotkeys currentToolButton handColor model
-                  in
-                  Ui.row
-                    { spacing = -2, padding = Ui.noPadding }
-                    [ nextPreviousTilesButton (pageIndex > 0) False (Coord.yRaw toolbarTileGroupsSize)
-                    , Ui.topLeft { size = toolbarTileGroupsSize } content
-                    , nextPreviousTilesButton
-                        (List.isEmpty remainingTileGroups |> not)
-                        True
-                        (Coord.yRaw toolbarTileGroupsSize)
-                    ]
-                ]
-            , selectedToolView handColor model currentToolButton
-            ]
 
 
 toolbarTileGroupsSize : Coord Pixels
@@ -1970,7 +1362,6 @@ screenToWorld :
         | windowSize : ( Quantity Int sourceUnits, Quantity Int sourceUnits )
         , devicePixelRatio : Float
         , zoomFactor : Int
-        , page : Page
         , mouseLeft : MouseButtonState
         , mouseMiddle : MouseButtonState
         , viewPoint : ViewPoint
@@ -2098,65 +1489,25 @@ canDragView hover =
 
 actualViewPoint :
     { a
-        | page : Page
-        , mouseLeft : MouseButtonState
+        | mouseLeft : MouseButtonState
         , mouseMiddle : MouseButtonState
         , devicePixelRatio : Float
         , zoomFactor : Int
         , viewPoint : ViewPoint
-        , trains : IdDict Id.TrainId Train.Train
         , time : Effect.Time.Posix
-        , currentTool : Tool
     }
     -> Point2d WorldUnit WorldUnit
 actualViewPoint model =
-    case ( model.page, model.mouseLeft, model.mouseMiddle ) of
-        ( WorldPage _, _, MouseButtonDown { start, current, hover } ) ->
-            offsetViewPoint model hover start current
-
-        ( WorldPage _, MouseButtonDown { start, current, hover }, _ ) ->
-            case model.currentTool of
-                TilePlacerTool _ ->
-                    actualViewPointHelper model
-
-                TilePickerTool ->
-                    offsetViewPoint model hover start current
-
-                HandTool ->
-                    offsetViewPoint model hover start current
-
-                TextTool _ ->
-                    actualViewPointHelper model
-
-                ReportTool ->
-                    offsetViewPoint model hover start current
-
-        _ ->
-            actualViewPointHelper model
+    actualViewPointHelper model
 
 
 actualViewPointHelper :
-    { a | viewPoint : ViewPoint, trains : IdDict Id.TrainId Train.Train, time : Effect.Time.Posix }
+    { a | viewPoint : ViewPoint, time : Effect.Time.Posix }
     -> Point2d WorldUnit WorldUnit
 actualViewPointHelper model =
     case model.viewPoint of
         NormalViewPoint viewPoint ->
             viewPoint
-
-        TrainViewPoint trainViewPoint ->
-            case IdDict.get trainViewPoint.trainId model.trains of
-                Just train ->
-                    let
-                        t =
-                            Quantity.ratio
-                                (Duration.from trainViewPoint.startTime model.time)
-                                (Duration.milliseconds 600)
-                                |> min 1
-                    in
-                    Point2d.interpolateFrom trainViewPoint.startViewPoint (Train.trainPosition model.time train) t
-
-                Nothing ->
-                    trainViewPoint.startViewPoint
 
 
 vector2dAt2 :

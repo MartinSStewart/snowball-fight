@@ -13,9 +13,7 @@ module Types exposing
     , LoadedLocalModel_
     , LoadingData_
     , LoadingLocalModel(..)
-    , LoginError(..)
     , MouseButtonState(..)
-    , Page(..)
     , RemovedTileParticle
     , SubmitStatus(..)
     , ToBackend(..)
@@ -26,7 +24,6 @@ module Types exposing
     , UpdateMeshesData
     , UserSettings
     , ViewPoint(..)
-    , WorldPage2
     )
 
 import AdminPage
@@ -34,21 +31,16 @@ import Animal exposing (Animal)
 import AssocList
 import AssocSet
 import Audio
-import Bounds exposing (Bounds)
 import Browser
 import Change exposing (AreTrainsAndAnimalsDisabled, BackendReport, Change, UserStatus)
 import Color exposing (Colors)
 import Coord exposing (Coord, RawCellCoord)
-import Cursor exposing (Cursor, CursorMeshes)
 import Dict exposing (Dict)
 import Duration exposing (Duration)
 import Effect.Browser.Navigation
-import Effect.File exposing (File)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time
 import Effect.WebGL.Texture exposing (Texture)
-import EmailAddress exposing (EmailAddress)
-import Grid exposing (Grid, GridData)
 import Html.Events.Extra.Mouse exposing (Button)
 import Html.Events.Extra.Wheel
 import Id exposing (AnimalId, EventId, Id, MailId, OneTimePasswordId, PersonId, SecretId, TrainId, UserId)
@@ -62,12 +54,9 @@ import MailEditor exposing (BackendMail, FrontendMail)
 import PingData exposing (PingData)
 import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
-import Route exposing (InviteToken, LoginOrInviteToken, LoginToken, PageRoute)
-import Shaders exposing (DebrisVertex)
 import Sound exposing (Sound)
 import Sprite exposing (Vertex)
 import TextInput
-import TextInputMultiline
 import Tile exposing (Category, Tile, TileGroup)
 import Time
 import Tool exposing (Tool)
@@ -75,7 +64,6 @@ import Train exposing (Train)
 import Ui
 import Units exposing (CellUnit, WorldUnit)
 import Url exposing (Url)
-import User exposing (FrontendUser, InviteTree)
 import WebGL
 
 
@@ -97,7 +85,6 @@ type alias FrontendLoading =
     , zoomFactor : Int
     , time : Maybe Effect.Time.Posix
     , viewPoint : Coord WorldUnit
-    , route : PageRoute
     , mousePosition : Point2d Pixels Pixels
     , sounds : AssocList.Dict Sound (Result Audio.LoadError Audio.Source)
     , musicVolume : Int
@@ -105,9 +92,7 @@ type alias FrontendLoading =
     , texture : Maybe Texture
     , lightsTexture : Maybe Texture
     , depthTexture : Maybe Texture
-    , simplexNoiseLookup : Maybe Texture
     , localModel : LoadingLocalModel
-    , hasCmdKey : Bool
     }
 
 
@@ -125,7 +110,6 @@ type alias LoadedLocalModel_ =
 
 type ViewPoint
     = NormalViewPoint (Point2d WorldUnit WorldUnit)
-    | TrainViewPoint { trainId : Id TrainId, startViewPoint : Point2d WorldUnit WorldUnit, startTime : Effect.Time.Posix }
 
 
 type ToolButton
@@ -139,14 +123,10 @@ type ToolButton
 type alias FrontendLoaded =
     { key : Effect.Browser.Navigation.Key
     , localModel : LocalModel Change LocalGrid
-    , trains : IdDict TrainId Train
-    , meshes : Dict RawCellCoord { foreground : WebGL.Mesh Vertex, background : WebGL.Mesh Vertex }
     , viewPoint : ViewPoint
-    , viewPointLastInterval : Point2d WorldUnit WorldUnit
     , texture : Texture
     , lightsTexture : Texture
     , depthTexture : Texture
-    , simplexNoiseLookup : Texture
     , trainTexture : Maybe Texture
     , trainLightsTexture : Maybe Texture
     , trainDepthTexture : Maybe Texture
@@ -159,76 +139,24 @@ type alias FrontendLoaded =
     , mouseLeft : MouseButtonState
     , mouseMiddle : MouseButtonState
     , pendingChanges : List ( Id EventId, Change.LocalChange )
-    , undoAddLast : Effect.Time.Posix
     , time : Effect.Time.Posix
     , startTime : Effect.Time.Posix
     , animationElapsedTime : Duration
-    , ignoreNextUrlChanged : Bool
-    , lastTilePlaced : Maybe { time : Effect.Time.Posix, overwroteTiles : Bool, tile : Tile, position : Coord WorldUnit }
     , sounds : AssocList.Dict Sound (Result Audio.LoadError Audio.Source)
     , musicVolume : Int
     , soundEffectVolume : Int
-    , removedTileParticles : List RemovedTileParticle
-    , debrisMesh : WebGL.Mesh DebrisVertex
-    , lastTrainWhistle : Maybe Effect.Time.Posix
-    , lastMailEditorToggle : Maybe Effect.Time.Posix
-    , currentTool : Tool
-    , lastTileRotation : List Effect.Time.Posix
-    , lastPlacementError : Maybe Effect.Time.Posix
     , ui : Ui.Element UiHover
     , uiMesh : WebGL.Mesh Vertex
-    , lastHouseClick : Maybe Effect.Time.Posix
     , eventIdCounter : Id EventId
     , pingData : Maybe PingData
     , pingStartTime : Maybe Effect.Time.Posix
     , localTime : Effect.Time.Posix
-    , scrollThreshold : Float
-    , tileColors : AssocList.Dict TileGroup Colors
-    , primaryColorTextInput : TextInput.Model
-    , secondaryColorTextInput : TextInput.Model
     , previousFocus : Maybe UiHover
     , focus : Maybe UiHover
-    , music : { startTime : Effect.Time.Posix, sound : Sound }
-    , previousCursorPositions : IdDict UserId { position : Point2d WorldUnit WorldUnit, time : Effect.Time.Posix }
-    , handMeshes : IdDict UserId CursorMeshes
-    , hasCmdKey : Bool
-    , loginEmailInput : TextInput.Model
-    , oneTimePasswordInput : TextInput.Model
-    , pressedSubmitEmail : SubmitStatus EmailAddress
     , topMenuOpened : Maybe TopMenu
-    , inviteTextInput : TextInput.Model
-    , inviteSubmitStatus : SubmitStatus EmailAddress
-    , railToggles : List ( Time.Posix, Coord WorldUnit )
-    , lastReceivedMail : Maybe Time.Posix
     , isReconnecting : Bool
     , lastCheckConnection : Time.Posix
-    , showOnlineUsers : Bool
-    , contextMenu : Maybe ContextMenu
-    , previousUpdateMeshData : UpdateMeshesData
-    , reportsMesh : WebGL.Mesh Vertex
-    , lastReportTilePlaced : Maybe Effect.Time.Posix
-    , lastReportTileRemoved : Maybe Effect.Time.Posix
     , hideUi : Bool
-    , lightsSwitched : Maybe Time.Posix
-    , page : Page
-    , selectedTileCategory : Category
-    , tileCategoryPageIndex : AssocList.Dict Category Int
-    , lastHotkeyChange : Maybe Time.Posix
-    , loginError : Maybe LoginError
-    , hyperlinkInput : TextInputMultiline.Model
-    }
-
-
-type Page
-    = MailPage MailEditor.Model
-    | AdminPage AdminPage.Model
-    | WorldPage WorldPage2
-    | InviteTreePage
-
-
-type alias WorldPage2 =
-    { showMap : Bool
-    , showInvite : Bool
     }
 
 
@@ -240,7 +168,6 @@ type alias UpdateMeshesData =
     , windowSize : Coord Pixels
     , devicePixelRatio : Float
     , zoomFactor : Int
-    , page : Page
     , mouseMiddle : MouseButtonState
     , viewPoint : ViewPoint
     , trains : IdDict TrainId Train
@@ -292,16 +219,7 @@ type alias UserSettings =
 
 
 type Hover
-    = TileHover
-        { tile : Tile
-        , userId : Id UserId
-        , position : Coord WorldUnit
-        , colors : Colors
-        , time : Effect.Time.Posix
-        }
-    | TrainHover { trainId : Id TrainId, train : Train }
-    | MapHover
-    | AnimalHover { animalId : Id AnimalId, animal : Animal }
+    = MapHover
     | UiBackgroundHover
     | UiHover UiHover { position : Coord Pixels }
 
@@ -373,7 +291,6 @@ type FrontendMsg_
     | TextureLoaded (Result Effect.WebGL.Texture.Error Texture)
     | LightsTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
     | DepthTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
-    | SimplexLookupTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
     | TrainTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
     | TrainLightsTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
     | TrainDepthTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
@@ -390,12 +307,7 @@ type FrontendMsg_
     | AnimationFrame Effect.Time.Posix
     | SoundLoaded Sound (Result Audio.LoadError Audio.Source)
     | VisibilityChanged
-    | PastedText String
-    | GotUserAgentPlatform String
-    | LoadedUserSettings UserSettings
     | GotWebGlFix
-    | ImportedMail File
-    | ImportedMail2 (Result () (List MailEditor.Content))
 
 
 type ToBackend

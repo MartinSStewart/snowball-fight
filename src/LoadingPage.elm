@@ -5,30 +5,21 @@ module LoadingPage exposing
     , cursorActualPosition
     , cursorPosition
     , devicePixelRatioChanged
-    , getAdminReports
     , getHandColor
-    , getReports
-    , getTileColor
     , handleOutMsg
     , hoverAt
-    , initWorldPage
     , loadingCanvasView
     , loadingCellBounds
     , mouseListeners
     , mouseScreenPosition
     , mouseWorldPosition
-    , setCurrentTool
-    , setCurrentToolWithColors
     , shortDelayDuration
     , showWorldPreview
     , update
     , updateLocalModel
-    , updateMeshes
-    , viewBoundsUpdate
     , windowResizedUpdate
     )
 
-import AdminPage
 import Animal exposing (Animal)
 import Array
 import AssocList
@@ -72,7 +63,6 @@ import Point2d exposing (Point2d)
 import Ports
 import Quantity exposing (Quantity)
 import Random
-import Route exposing (PageRoute(..))
 import Set exposing (Set)
 import Shaders
 import Sound
@@ -84,7 +74,7 @@ import Tile exposing (Category(..), Tile(..), TileGroup(..))
 import Tool exposing (Tool(..))
 import Toolbar
 import Train exposing (Train)
-import Types exposing (CssPixels, FrontendLoaded, FrontendLoading, FrontendModel_(..), FrontendMsg_(..), Hover(..), LoadedLocalModel_, LoadingLocalModel(..), MouseButtonState(..), Page(..), SubmitStatus(..), ToBackend(..), ToolButton(..), UiHover(..), UpdateMeshesData, ViewPoint(..), WorldPage2)
+import Types exposing (CssPixels, FrontendLoaded, FrontendLoading, FrontendModel_(..), FrontendMsg_(..), Hover(..), LoadedLocalModel_, LoadingLocalModel(..), MouseButtonState(..), SubmitStatus(..), ToBackend(..), ToolButton(..), UiHover(..), UpdateMeshesData, ViewPoint(..))
 import Ui
 import Units exposing (CellUnit, WorldUnit)
 import Vector2d
@@ -134,14 +124,6 @@ update msg loadingModel =
                 Err _ ->
                     ( Loading loadingModel, Command.none, Audio.cmdNone )
 
-        SimplexLookupTextureLoaded result ->
-            case result of
-                Ok texture ->
-                    ( Loading { loadingModel | simplexNoiseLookup = Just texture }, Command.none, Audio.cmdNone )
-
-                Err _ ->
-                    ( Loading loadingModel, Command.none, Audio.cmdNone )
-
         MouseMove mousePosition ->
             ( Loading { loadingModel | mousePosition = mousePosition }, Command.none, Audio.cmdNone )
 
@@ -173,22 +155,6 @@ update msg loadingModel =
         AnimationFrame time ->
             ( Loading { loadingModel | time = Just time }, Command.none, Audio.cmdNone )
 
-        GotUserAgentPlatform userAgentPlatform ->
-            ( Loading { loadingModel | hasCmdKey = String.startsWith "mac" (String.toLower userAgentPlatform) }
-            , Ports.webGlFix
-            , Audio.cmdNone
-            )
-
-        LoadedUserSettings userSettings ->
-            ( Loading
-                { loadingModel
-                    | musicVolume = userSettings.musicVolume
-                    , soundEffectVolume = userSettings.soundEffectVolume
-                }
-            , Command.none
-            , Audio.cmdNone
-            )
-
         GotWebGlFix ->
             ( Loading loadingModel
             , Command.batch
@@ -219,7 +185,6 @@ update msg loadingModel =
                     }
                     "/depth.png"
                     |> Effect.Task.attempt DepthTextureLoaded
-                , Effect.Task.attempt SimplexLookupTextureLoaded loadSimplexTexture
                 ]
             , Audio.cmdNone
             )
@@ -245,20 +210,14 @@ tryLoading frontendLoading =
             Nothing
 
         LoadedLocalModel loadedLocalModel ->
-            Maybe.map5
-                (\time texture lightsTexture depthTexture simplexNoiseLookup () ->
-                    loadedInit time frontendLoading texture lightsTexture depthTexture simplexNoiseLookup loadedLocalModel
+            Maybe.map4
+                (\time texture lightsTexture depthTexture () ->
+                    loadedInit time frontendLoading texture lightsTexture depthTexture loadedLocalModel
                 )
                 frontendLoading.time
                 frontendLoading.texture
                 frontendLoading.lightsTexture
                 frontendLoading.depthTexture
-                frontendLoading.simplexNoiseLookup
-
-
-initWorldPage : WorldPage2
-initWorldPage =
-    { showMap = False, showInvite = False }
 
 
 loadedInit :
@@ -267,10 +226,9 @@ loadedInit :
     -> Texture
     -> Texture
     -> Texture
-    -> Texture
     -> LoadedLocalModel_
     -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
-loadedInit time loading texture lightsTexture depthTexture simplexNoiseLookup loadedLocalModel =
+loadedInit time loading texture lightsTexture depthTexture loadedLocalModel =
     let
         currentTool2 =
             HandTool
@@ -300,7 +258,6 @@ loadedInit time loading texture lightsTexture depthTexture simplexNoiseLookup lo
             , windowSize = loading.windowSize
             , devicePixelRatio = loading.devicePixelRatio
             , zoomFactor = loading.zoomFactor
-            , page = WorldPage initWorldPage
             , viewPoint = viewpoint
             , trains = loadedLocalModel.trains
             , time = time
@@ -310,14 +267,10 @@ loadedInit time loading texture lightsTexture depthTexture simplexNoiseLookup lo
         model =
             { key = loading.key
             , localModel = loadedLocalModel.localModel
-            , trains = loadedLocalModel.trains
-            , meshes = Dict.empty
             , viewPoint = viewpoint
-            , viewPointLastInterval = Point2d.origin
             , texture = texture
             , lightsTexture = lightsTexture
             , depthTexture = depthTexture
-            , simplexNoiseLookup = simplexNoiseLookup
             , trainTexture = Nothing
             , trainLightsTexture = Nothing
             , trainDepthTexture = Nothing
@@ -330,107 +283,27 @@ loadedInit time loading texture lightsTexture depthTexture simplexNoiseLookup lo
             , mouseLeft = mouseLeft
             , mouseMiddle = mouseMiddle
             , pendingChanges = []
-            , undoAddLast = Time.millisToPosix 0
             , time = time
             , startTime = time
             , animationElapsedTime = Duration.seconds 0
-            , ignoreNextUrlChanged = False
-            , lastTilePlaced = Nothing
             , sounds = loading.sounds
             , musicVolume = loading.musicVolume
             , soundEffectVolume = loading.soundEffectVolume
-            , removedTileParticles = []
-            , debrisMesh = Shaders.triangleFan []
-            , lastTrainWhistle = Nothing
-            , page =
-                case ( loading.route, LocalGrid.localModel loadedLocalModel.localModel |> .userStatus ) of
-                    ( MailEditorRoute, LoggedIn _ ) ->
-                        MailEditor.init Nothing |> MailPage
-
-                    ( AdminRoute, LoggedIn loggedIn ) ->
-                        case loggedIn.adminData of
-                            Just _ ->
-                                AdminPage.init |> AdminPage
-
-                            Nothing ->
-                                WorldPage initWorldPage
-
-                    ( InviteTreeRoute, _ ) ->
-                        InviteTreePage
-
-                    _ ->
-                        WorldPage initWorldPage
-            , lastMailEditorToggle = Nothing
-            , currentTool = currentTool2
-            , lastTileRotation = []
-            , lastPlacementError = Nothing
             , ui = Ui.none
             , uiMesh = Shaders.triangleFan []
-            , lastHouseClick = Nothing
             , eventIdCounter = Id.fromInt 0
             , pingData = Nothing
             , pingStartTime = Just time
             , localTime = time
-            , scrollThreshold = 0
-            , tileColors = defaultTileColors
-            , primaryColorTextInput = TextInput.init
-            , secondaryColorTextInput = TextInput.init
             , focus = Nothing
             , previousFocus = Nothing
-            , music =
-                { startTime = Duration.addTo time (Duration.seconds 10)
-                , sound =
-                    Random.step
-                        (Sound.nextSong Nothing)
-                        (Random.initialSeed (Time.posixToMillis time))
-                        |> Tuple.first
-                }
-            , previousCursorPositions = IdDict.empty
-            , handMeshes =
-                LocalGrid.localModel loadedLocalModel.localModel
-                    |> .users
-                    |> IdDict.map
-                        (\userId user ->
-                            Cursor.meshes
-                                (if currentUserId2 == Just userId then
-                                    Nothing
-
-                                 else
-                                    Just ( userId, user.name )
-                                )
-                                user.handColor
-                        )
-            , hasCmdKey = loading.hasCmdKey
-            , loginEmailInput = TextInput.init
-            , pressedSubmitEmail = NotSubmitted { pressedSubmit = False }
             , topMenuOpened = Nothing
-            , inviteTextInput = TextInput.init
-            , inviteSubmitStatus = NotSubmitted { pressedSubmit = False }
-            , railToggles = []
-            , lastReceivedMail = Nothing
             , isReconnecting = False
             , lastCheckConnection = time
-            , showOnlineUsers = False
-            , contextMenu = Nothing
-            , previousUpdateMeshData = previousUpdateMeshData
-            , reportsMesh =
-                createReportsMesh
-                    (getReports loadedLocalModel.localModel)
-                    (getAdminReports loadedLocalModel.localModel)
-            , lastReportTilePlaced = Nothing
-            , lastReportTileRemoved = Nothing
             , hideUi = False
-            , lightsSwitched = Nothing
-            , selectedTileCategory = Buildings
-            , tileCategoryPageIndex = AssocList.empty
-            , lastHotkeyChange = Nothing
-            , oneTimePasswordInput = TextInput.init
-            , loginError = Nothing
-            , hyperlinkInput = TextInputMultiline.init |> TextInputMultiline.withText "example.com"
             }
-                |> setCurrentTool HandToolButton
     in
-    ( updateMeshes model
+    ( model
     , Command.batch
         [ Effect.WebGL.Texture.loadWith
             { magnify = Effect.WebGL.Texture.nearest
@@ -462,7 +335,6 @@ loadedInit time loading texture lightsTexture depthTexture simplexNoiseLookup lo
         , Effect.Lamdera.sendToBackend PingRequest
         ]
     )
-        |> viewBoundsUpdate
         |> (\( a, b ) -> ( Loaded a, b, Audio.cmdNone ))
 
 
@@ -545,396 +417,12 @@ expandHyperlink startPos flattenedValues =
         startPos
 
 
-hardUpdateMeshes : FrontendLoaded -> FrontendLoaded
-hardUpdateMeshes newModel =
-    let
-        localModel : LocalGrid_
-        localModel =
-            LocalGrid.localModel newModel.localModel
-
-        newCells : Dict ( Int, Int ) (GridCell.Cell FrontendHistory)
-        newCells =
-            localModel.grid |> Grid.allCellsDict
-
-        currentTile model =
-            case LocalGrid.currentTool model of
-                TilePlacerTool { tileGroup, index } ->
-                    let
-                        tile =
-                            Toolbar.getTileGroupTile tileGroup index
-
-                        position : Coord WorldUnit
-                        position =
-                            cursorPosition (Tile.getData tile) model
-
-                        ( cellPosition, localPosition ) =
-                            Grid.worldToCellAndLocalCoord position
-                    in
-                    { tile = tile
-                    , position = position
-                    , cellPosition =
-                        Grid.closeNeighborCells cellPosition localPosition
-                            |> List.map Tuple.first
-                            |> (::) cellPosition
-                            |> List.map Coord.toTuple
-                            |> Set.fromList
-                    , colors =
-                        { primaryColor = Color.rgb255 0 0 0
-                        , secondaryColor = Color.rgb255 255 255 255
-                        }
-                    }
-                        |> Just
-
-                HandTool ->
-                    Nothing
-
-                TilePickerTool ->
-                    Nothing
-
-                TextTool _ ->
-                    Nothing
-
-                ReportTool ->
-                    Nothing
-
-        newCurrentTile : Maybe { tile : Tile, position : Coord WorldUnit, cellPosition : Set ( Int, Int ), colors : Colors }
-        newCurrentTile =
-            currentTile newModel
-
-        newMaybeUserId =
-            LocalGrid.currentUserId newModel
-
-        hyperlinksVisited : Set String
-        hyperlinksVisited =
-            case localModel.userStatus of
-                LoggedIn loggedIn ->
-                    loggedIn.hyperlinksVisited
-
-                NotLoggedIn _ ->
-                    Set.empty
-
-        newMesh :
-            Maybe (Effect.WebGL.Mesh Vertex)
-            -> GridCell.Cell FrontendHistory
-            -> ( Int, Int )
-            -> { foreground : Effect.WebGL.Mesh Vertex, background : Effect.WebGL.Mesh Vertex }
-        newMesh backgroundMesh newCell rawCoord =
-            let
-                coord : Coord CellUnit
-                coord =
-                    Coord.tuple rawCoord
-
-                flattened : List GridCell.Value
-                flattened =
-                    GridCell.flatten newCell
-            in
-            { foreground =
-                Grid.foregroundMesh2
-                    (List.filterMap
-                        (\value ->
-                            case value.tile of
-                                HyperlinkTile hyperlink ->
-                                    let
-                                        linkPos =
-                                            expandHyperlink value.position flattened
-                                    in
-                                    Just
-                                        { linkTopLeft = Grid.cellAndLocalCoordToWorld ( coord, linkPos )
-                                        , linkWidth = Coord.xRaw value.position - Coord.xRaw linkPos
-                                        , isVisited = Set.member (Hyperlink.toString hyperlink) hyperlinksVisited
-                                        }
-
-                                _ ->
-                                    Nothing
-                        )
-                        flattened
-                    )
-                    newShowEmptyTiles
-                    (case ( newCurrentTile, newMaybeUserId ) of
-                        ( Just newCurrentTile_, Just userId ) ->
-                            if
-                                canPlaceTile
-                                    newModel.time
-                                    { userId = userId
-                                    , position = newCurrentTile_.position
-                                    , change = newCurrentTile_.tile
-                                    , colors = newCurrentTile_.colors
-                                    , time = newModel.time
-                                    }
-                                    newModel.trains
-                                    localModel.grid
-                            then
-                                newCurrentTile
-
-                            else
-                                Nothing
-
-                        _ ->
-                            Nothing
-                    )
-                    coord
-                    newMaybeUserId
-                    (LocalGrid.localModel newModel.localModel |> .users)
-                    (GridCell.getToggledRailSplit newCell)
-                    flattened
-            , background =
-                case backgroundMesh of
-                    Just background ->
-                        background
-
-                    Nothing ->
-                        Grid.backgroundMesh coord
-            }
-
-        newShowEmptyTiles =
-            newModel.currentTool == ReportTool
-    in
-    { newModel
-        | meshes =
-            Dict.map
-                (\coord newCell ->
-                    newMesh (Dict.get coord newModel.meshes |> Maybe.map .background) newCell coord
-                )
-                newCells
-        , previousUpdateMeshData =
-            { localModel = newModel.localModel
-            , pressedKeys = newModel.pressedKeys
-            , currentTool = newModel.currentTool
-            , mouseLeft = newModel.mouseLeft
-            , windowSize = newModel.windowSize
-            , devicePixelRatio = newModel.devicePixelRatio
-            , zoomFactor = newModel.zoomFactor
-            , page = newModel.page
-            , mouseMiddle = newModel.mouseMiddle
-            , viewPoint = newModel.viewPoint
-            , trains = newModel.trains
-            , time = newModel.time
-            }
-    }
-
-
-updateMeshes : FrontendLoaded -> FrontendLoaded
-updateMeshes newModel =
-    let
-        oldModel =
-            newModel.previousUpdateMeshData
-
-        oldCells : Dict ( Int, Int ) (GridCell.Cell FrontendHistory)
-        oldCells =
-            LocalGrid.localModel oldModel.localModel |> .grid |> Grid.allCellsDict
-
-        localModel : LocalGrid_
-        localModel =
-            LocalGrid.localModel newModel.localModel
-
-        newCells : Dict ( Int, Int ) (GridCell.Cell FrontendHistory)
-        newCells =
-            localModel.grid |> Grid.allCellsDict
-
-        currentTile model =
-            case LocalGrid.currentTool model of
-                TilePlacerTool { tileGroup, index } ->
-                    let
-                        tile =
-                            Toolbar.getTileGroupTile tileGroup index
-
-                        position : Coord WorldUnit
-                        position =
-                            cursorPosition (Tile.getData tile) model
-
-                        ( cellPosition, localPosition ) =
-                            Grid.worldToCellAndLocalCoord position
-                    in
-                    { tile = tile
-                    , position = position
-                    , cellPosition =
-                        Grid.closeNeighborCells cellPosition localPosition
-                            |> List.map Tuple.first
-                            |> (::) cellPosition
-                            |> List.map Coord.toTuple
-                            |> Set.fromList
-                    , colors =
-                        { primaryColor = Color.rgb255 0 0 0
-                        , secondaryColor = Color.rgb255 255 255 255
-                        }
-                    }
-                        |> Just
-
-                HandTool ->
-                    Nothing
-
-                TilePickerTool ->
-                    Nothing
-
-                TextTool _ ->
-                    Nothing
-
-                ReportTool ->
-                    Nothing
-
-        oldCurrentTile : Maybe { tile : Tile, position : Coord WorldUnit, cellPosition : Set ( Int, Int ), colors : Colors }
-        oldCurrentTile =
-            currentTile oldModel
-
-        newCurrentTile : Maybe { tile : Tile, position : Coord WorldUnit, cellPosition : Set ( Int, Int ), colors : Colors }
-        newCurrentTile =
-            currentTile newModel
-
-        currentTileUnchanged : Bool
-        currentTileUnchanged =
-            oldCurrentTile == newCurrentTile
-
-        newMaybeUserId =
-            LocalGrid.currentUserId newModel
-
-        hyperlinksVisited : Set String
-        hyperlinksVisited =
-            case localModel.userStatus of
-                LoggedIn loggedIn ->
-                    loggedIn.hyperlinksVisited
-
-                NotLoggedIn _ ->
-                    Set.empty
-
-        newMesh :
-            Maybe (Effect.WebGL.Mesh Vertex)
-            -> GridCell.Cell FrontendHistory
-            -> ( Int, Int )
-            -> { foreground : Effect.WebGL.Mesh Vertex, background : Effect.WebGL.Mesh Vertex }
-        newMesh backgroundMesh newCell rawCoord =
-            let
-                coord : Coord CellUnit
-                coord =
-                    Coord.tuple rawCoord
-
-                flattened : List GridCell.Value
-                flattened =
-                    GridCell.flatten newCell
-            in
-            { foreground =
-                Grid.foregroundMesh2
-                    (List.filterMap
-                        (\value ->
-                            case value.tile of
-                                HyperlinkTile hyperlink ->
-                                    let
-                                        linkPos =
-                                            expandHyperlink value.position flattened
-                                    in
-                                    Just
-                                        { linkTopLeft = Grid.cellAndLocalCoordToWorld ( coord, linkPos )
-                                        , linkWidth = Coord.xRaw value.position - Coord.xRaw linkPos
-                                        , isVisited = Set.member (Hyperlink.toString hyperlink) hyperlinksVisited
-                                        }
-
-                                _ ->
-                                    Nothing
-                        )
-                        flattened
-                    )
-                    newShowEmptyTiles
-                    (case ( newCurrentTile, newMaybeUserId ) of
-                        ( Just newCurrentTile_, Just userId ) ->
-                            if
-                                canPlaceTile
-                                    newModel.time
-                                    { userId = userId
-                                    , position = newCurrentTile_.position
-                                    , change = newCurrentTile_.tile
-                                    , colors = newCurrentTile_.colors
-                                    , time = newModel.time
-                                    }
-                                    newModel.trains
-                                    localModel.grid
-                            then
-                                newCurrentTile
-
-                            else
-                                Nothing
-
-                        _ ->
-                            Nothing
-                    )
-                    coord
-                    newMaybeUserId
-                    (LocalGrid.localModel newModel.localModel |> .users)
-                    (GridCell.getToggledRailSplit newCell)
-                    flattened
-            , background =
-                case backgroundMesh of
-                    Just background ->
-                        background
-
-                    Nothing ->
-                        Grid.backgroundMesh coord
-            }
-
-        newShowEmptyTiles =
-            newModel.currentTool == ReportTool
-
-        oldShowEmptyTiles =
-            newModel.previousUpdateMeshData.currentTool == ReportTool
-    in
-    { newModel
-        | meshes =
-            Dict.map
-                (\coord newCell ->
-                    case Dict.get coord oldCells of
-                        Just oldCell ->
-                            if oldCell == newCell && (newShowEmptyTiles == oldShowEmptyTiles) then
-                                if
-                                    ((Maybe.map .cellPosition newCurrentTile
-                                        |> Maybe.withDefault Set.empty
-                                        |> Set.member coord
-                                     )
-                                        || (Maybe.map .cellPosition oldCurrentTile
-                                                |> Maybe.withDefault Set.empty
-                                                |> Set.member coord
-                                           )
-                                    )
-                                        && not currentTileUnchanged
-                                then
-                                    newMesh (Dict.get coord newModel.meshes |> Maybe.map .background) newCell coord
-
-                                else
-                                    case Dict.get coord newModel.meshes of
-                                        Just mesh ->
-                                            mesh
-
-                                        Nothing ->
-                                            newMesh Nothing newCell coord
-
-                            else
-                                newMesh (Dict.get coord newModel.meshes |> Maybe.map .background) newCell coord
-
-                        Nothing ->
-                            newMesh (Dict.get coord newModel.meshes |> Maybe.map .background) newCell coord
-                )
-                newCells
-        , previousUpdateMeshData =
-            { localModel = newModel.localModel
-            , pressedKeys = newModel.pressedKeys
-            , currentTool = newModel.currentTool
-            , mouseLeft = newModel.mouseLeft
-            , windowSize = newModel.windowSize
-            , devicePixelRatio = newModel.devicePixelRatio
-            , zoomFactor = newModel.zoomFactor
-            , page = newModel.page
-            , mouseMiddle = newModel.mouseMiddle
-            , viewPoint = newModel.viewPoint
-            , trains = newModel.trains
-            , time = newModel.time
-            }
-    }
-
-
 mouseWorldPosition :
     { a
         | mouseLeft : MouseButtonState
         , windowSize : ( Quantity Int Pixels, Quantity Int Pixels )
         , devicePixelRatio : Float
         , zoomFactor : Int
-        , page : Page
         , mouseMiddle : MouseButtonState
         , viewPoint : ViewPoint
         , trains : IdDict TrainId Train
@@ -964,7 +452,6 @@ cursorPosition :
             , windowSize : ( Quantity Int Pixels, Quantity Int Pixels )
             , devicePixelRatio : Float
             , zoomFactor : Int
-            , page : Page
             , mouseMiddle : MouseButtonState
             , viewPoint : ViewPoint
             , trains : IdDict TrainId Train
@@ -993,115 +480,6 @@ getHandColor userId model =
             Cursor.defaultColors
 
 
-setCurrentTool : ToolButton -> FrontendLoaded -> FrontendLoaded
-setCurrentTool toolButton model =
-    let
-        colors =
-            case toolButton of
-                TilePlacerToolButton tileGroup ->
-                    getTileColor tileGroup model
-
-                HandToolButton ->
-                    case LocalGrid.currentUserId model of
-                        Just userId ->
-                            getHandColor userId model
-
-                        Nothing ->
-                            Cursor.defaultColors
-
-                TilePickerToolButton ->
-                    { primaryColor = Color.white, secondaryColor = Color.black }
-
-                TextToolButton ->
-                    getTileColor BigTextGroup model
-
-                ReportToolButton ->
-                    { primaryColor = Color.white, secondaryColor = Color.black }
-
-        tool =
-            case toolButton of
-                TilePlacerToolButton tileGroup ->
-                    TilePlacerTool
-                        { tileGroup = tileGroup
-                        , index = 0
-                        , mesh = Grid.tileMesh (Toolbar.getTileGroupTile tileGroup 0) Coord.origin 1 colors |> Sprite.toMesh
-                        }
-
-                HandToolButton ->
-                    HandTool
-
-                TilePickerToolButton ->
-                    TilePickerTool
-
-                TextToolButton ->
-                    TextTool Nothing
-
-                ReportToolButton ->
-                    ReportTool
-    in
-    setCurrentToolWithColors tool colors model
-
-
-setCurrentToolWithColors : Tool -> Colors -> FrontendLoaded -> FrontendLoaded
-setCurrentToolWithColors tool colors model =
-    { model
-        | currentTool = tool
-        , primaryColorTextInput = TextInput.init |> TextInput.withText (Color.toHexCode colors.primaryColor)
-        , secondaryColorTextInput = TextInput.init |> TextInput.withText (Color.toHexCode colors.secondaryColor)
-        , tileColors =
-            case tool of
-                TilePlacerTool { tileGroup } ->
-                    AssocList.insert tileGroup colors model.tileColors
-
-                HandTool ->
-                    model.tileColors
-
-                TilePickerTool ->
-                    model.tileColors
-
-                TextTool _ ->
-                    AssocList.insert BigTextGroup colors model.tileColors
-
-                ReportTool ->
-                    model.tileColors
-    }
-
-
-getTileColor : TileGroup -> { a | tileColors : AssocList.Dict TileGroup Colors } -> Colors
-getTileColor tileGroup model =
-    case AssocList.get tileGroup model.tileColors of
-        Just a ->
-            a
-
-        Nothing ->
-            Tile.getTileGroupData tileGroup |> .defaultColors |> Tile.defaultToPrimaryAndSecondary
-
-
-getReports : LocalModel a LocalGrid -> List Report
-getReports localModel =
-    case LocalGrid.localModel localModel |> .userStatus of
-        LoggedIn loggedIn ->
-            loggedIn.reports
-
-        NotLoggedIn _ ->
-            []
-
-
-getAdminReports : LocalModel a LocalGrid -> IdDict UserId (Nonempty BackendReport)
-getAdminReports localModel =
-    case LocalGrid.localModel localModel |> .userStatus of
-        LoggedIn loggedIn ->
-            case loggedIn.adminData of
-                Just adminData ->
-                    adminData.reported
-
-                Nothing ->
-                    IdDict.empty
-
-        NotLoggedIn _ ->
-            IdDict.empty
-
-
 updateLocalModel : Change.LocalChange -> FrontendLoaded -> ( FrontendLoaded, LocalGrid.OutMsg )
 updateLocalModel msg model =
     let
@@ -1115,87 +493,6 @@ updateLocalModel msg model =
       }
     , outMsg
     )
-
-
-viewBoundsUpdate : ( FrontendLoaded, Command FrontendOnly ToBackend FrontendMsg_ ) -> ( FrontendLoaded, Command FrontendOnly ToBackend FrontendMsg_ )
-viewBoundsUpdate ( model, cmd ) =
-    let
-        bounds =
-            loadingCellBounds model
-
-        localModel =
-            LocalGrid.localModel model.localModel
-
-        newBoundsContained =
-            Bounds.containsBounds bounds localModel.viewBounds
-
-        mousePosition =
-            case model.mouseLeft of
-                MouseButtonDown { current } ->
-                    current
-
-                MouseButtonUp { current } ->
-                    current
-
-        getPreviewBounds viewPosition =
-            Nonempty
-                (viewPosition
-                    |> Coord.minus LocalGrid.notificationViewportHalfSize
-                    |> Grid.worldToCellAndLocalCoord
-                    |> Tuple.first
-                )
-                [ viewPosition
-                    |> Coord.plus LocalGrid.notificationViewportHalfSize
-                    |> Grid.worldToCellAndLocalCoord
-                    |> Tuple.first
-                ]
-                |> Bounds.fromCoords
-
-        newPreview =
-            case ( showWorldPreview (hoverAt model mousePosition), localModel.previewBounds ) of
-                ( Just ( position, _ ), Just oldPreviewBounds ) ->
-                    let
-                        previewBounds =
-                            getPreviewBounds position
-                    in
-                    if
-                        Bounds.containsBounds previewBounds oldPreviewBounds
-                            || Bounds.containsBounds previewBounds localModel.viewBounds
-                    then
-                        Nothing
-
-                    else
-                        Just previewBounds
-
-                ( Nothing, _ ) ->
-                    Nothing
-
-                ( Just ( position, _ ), Nothing ) ->
-                    let
-                        previewBounds =
-                            getPreviewBounds position
-                    in
-                    if Bounds.containsBounds previewBounds localModel.viewBounds then
-                        Nothing
-
-                    else
-                        Just previewBounds
-    in
-    if newBoundsContained && newPreview == Nothing then
-        ( model, cmd )
-
-    else
-        updateLocalModel
-            (Change.ViewBoundsChange
-                { viewBounds = bounds
-                , previewBounds = newPreview
-                , newCells = []
-                , newCows = []
-                }
-            )
-            model
-            |> handleOutMsg False
-            |> Tuple.mapSecond (\cmd2 -> Command.batch [ cmd, cmd2 ])
 
 
 hoverAt : FrontendLoaded -> Point2d Pixels Pixels -> Hover
@@ -1214,130 +511,7 @@ hoverAt model mousePosition =
             UiBackgroundHover
 
         Ui.NoHover ->
-            let
-                mouseWorldPosition_ : Point2d WorldUnit WorldUnit
-                mouseWorldPosition_ =
-                    Toolbar.screenToWorld model mousePosition
-
-                tileHover : Maybe Hover
-                tileHover =
-                    let
-                        localModel : LocalGrid_
-                        localModel =
-                            LocalGrid.localModel model.localModel
-                    in
-                    case Grid.getTile (Coord.floorPoint mouseWorldPosition_) localModel.grid of
-                        Just tile ->
-                            case model.currentTool of
-                                HandTool ->
-                                    TileHover tile |> Just
-
-                                TilePickerTool ->
-                                    TileHover tile |> Just
-
-                                TilePlacerTool _ ->
-                                    if LocalGrid.ctrlOrMeta model then
-                                        TileHover tile |> Just
-
-                                    else
-                                        Nothing
-
-                                TextTool _ ->
-                                    if LocalGrid.ctrlOrMeta model then
-                                        TileHover tile |> Just
-
-                                    else
-                                        Nothing
-
-                                ReportTool ->
-                                    TileHover tile |> Just
-
-                        Nothing ->
-                            Nothing
-
-                trainHovers : Maybe ( { trainId : Id TrainId, train : Train }, Quantity Float WorldUnit )
-                trainHovers =
-                    case model.currentTool of
-                        TilePlacerTool _ ->
-                            Nothing
-
-                        TilePickerTool ->
-                            Nothing
-
-                        HandTool ->
-                            IdDict.toList model.trains
-                                |> List.filterMap
-                                    (\( trainId, train ) ->
-                                        let
-                                            distance =
-                                                Train.trainPosition model.time train |> Point2d.distanceFrom mouseWorldPosition_
-                                        in
-                                        if distance |> Quantity.lessThan (Quantity.unsafe 0.9) then
-                                            Just ( { trainId = trainId, train = train }, distance )
-
-                                        else
-                                            Nothing
-                                    )
-                                |> Quantity.minimumBy Tuple.second
-
-                        TextTool _ ->
-                            Nothing
-
-                        ReportTool ->
-                            Nothing
-
-                localGrid : LocalGrid_
-                localGrid =
-                    LocalGrid.localModel model.localModel
-
-                animalHovers : Maybe ( Id AnimalId, Animal )
-                animalHovers =
-                    case model.currentTool of
-                        TilePlacerTool _ ->
-                            Nothing
-
-                        TilePickerTool ->
-                            Nothing
-
-                        HandTool ->
-                            IdDict.toList localGrid.animals
-                                |> List.filter
-                                    (\( animalId, animal ) ->
-                                        case animalActualPosition animalId model of
-                                            Just a ->
-                                                if a.isHeld then
-                                                    False
-
-                                                else
-                                                    Animal.inside mouseWorldPosition_ { animal | position = a.position }
-
-                                            Nothing ->
-                                                False
-                                    )
-                                |> Quantity.maximumBy (\( _, cow ) -> Point2d.yCoordinate cow.position)
-
-                        TextTool _ ->
-                            Nothing
-
-                        ReportTool ->
-                            Nothing
-            in
-            case trainHovers of
-                Just ( train, _ ) ->
-                    TrainHover train
-
-                Nothing ->
-                    case animalHovers of
-                        Just ( animalId, animal ) ->
-                            AnimalHover { animalId = animalId, animal = animal }
-
-                        Nothing ->
-                            case tileHover of
-                                Just hover ->
-                                    hover
-
-                                Nothing ->
-                                    MapHover
+            MapHover
 
 
 animalActualPosition : Id AnimalId -> FrontendLoaded -> Maybe { position : Point2d WorldUnit WorldUnit, isHeld : Bool }
@@ -1369,27 +543,7 @@ animalActualPosition animalId model =
 
 cursorActualPosition : Bool -> Id UserId -> Cursor -> FrontendLoaded -> Point2d WorldUnit WorldUnit
 cursorActualPosition isCurrentUser userId cursor model =
-    if isCurrentUser then
-        cursor.position
-
-    else
-        case ( cursor.currentTool, IdDict.get userId model.previousCursorPositions ) of
-            ( Cursor.TextTool (Just textTool), _ ) ->
-                Coord.toPoint2d textTool.cursorPosition
-                    |> Point2d.translateBy (Vector2d.unsafe { x = 0, y = 0.5 })
-
-            ( _, Just previous ) ->
-                Point2d.interpolateFrom
-                    previous.position
-                    cursor.position
-                    (Quantity.ratio
-                        (Duration.from previous.time model.time)
-                        shortDelayDuration
-                        |> clamp 0 1
-                    )
-
-            _ ->
-                cursor.position
+    cursor.position
 
 
 shortDelayDuration : Duration

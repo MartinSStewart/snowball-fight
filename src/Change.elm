@@ -107,46 +107,8 @@ type AreTrainsAndAnimalsDisabled
 
 
 type ServerChange
-    = ServerGridChange
-        { gridChange : Grid.GridChange
-        , newCells : List (Coord CellUnit)
-        , newAnimals : List ( Id AnimalId, Animal )
-        }
-    | ServerUndoPoint { userId : Id UserId, undoPoints : Dict RawCellCoord Int }
-    | ServerPickupAnimal (Id UserId) (Id AnimalId) (Point2d WorldUnit WorldUnit) Effect.Time.Posix
-    | ServerDropAnimal (Id UserId) (Id AnimalId) (Point2d WorldUnit WorldUnit)
-    | ServerMoveCursor (Id UserId) (Point2d WorldUnit WorldUnit)
-    | ServerUserDisconnected (Id UserId)
-    | ServerUserConnected
-        { maybeLoggedIn : Maybe { userId : Id UserId, user : FrontendUser }
-        , cowsSpawnedFromVisibleRegion : List ( Id AnimalId, Animal )
-        }
-    | ServerYouLoggedIn LoggedIn_ FrontendUser
-    | ServerChangeHandColor (Id UserId) Colors
-    | ServerToggleRailSplit (Coord WorldUnit)
-    | ServerChangeDisplayName (Id UserId) DisplayName
-    | ServerSubmitMail { from : Id UserId, to : Id UserId }
-    | ServerMailStatusChanged (Id MailId) MailStatus
-    | ServerTeleportHomeTrainRequest (Id TrainId) Effect.Time.Posix
-    | ServerLeaveHomeTrainRequest (Id TrainId) Effect.Time.Posix
-    | ServerWorldUpdateBroadcast (IdDict TrainId TrainDiff)
-    | ServerWorldUpdateDuration Duration
-    | ServerReceivedMail
-        { mailId : Id MailId
-        , from : Id UserId
-        , content : List MailEditor.Content
-        , deliveryTime : Effect.Time.Posix
-        }
-    | ServerViewedMail (Id MailId) (Id UserId)
-    | ServerNewCows (Nonempty ( Id AnimalId, Animal ))
-    | ServerChangeTool (Id UserId) Cursor.OtherUsersTool
-    | ServerGridReadOnly Bool
-    | ServerVandalismReportedToAdmin (Id UserId) BackendReport
-    | ServerVandalismRemovedToAdmin (Id UserId) (Coord WorldUnit)
-    | ServerSetTrainsDisabled AreTrainsAndAnimalsDisabled
-    | ServerLogout
-    | ServerAnimalMovement (Nonempty ( Id AnimalId, MovementChange ))
-    | ServerRegenerateCache Effect.Time.Posix
+    = ServerUserDisconnected (Id UserId)
+    | ServerUserConnected (Id UserId)
 
 
 type alias MovementChange =
