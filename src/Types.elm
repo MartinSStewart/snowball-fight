@@ -239,7 +239,6 @@ type FrontendMsg_
     | MouseLeave
     | AnimationFrame Effect.Time.Posix
     | SoundLoaded Sound (Result Audio.LoadError Audio.Source)
-    | GotWebGlFix
 
 
 type ToBackend

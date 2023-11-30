@@ -181,26 +181,6 @@ maxVolumeDistance =
 
 init : Url -> Effect.Browser.Navigation.Key -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
 init url key =
-    let
-        { data, cmd } =
-            let
-                defaultRoute =
-                    Route.internalRoute Route.startPointAt
-            in
-            case Route.decode url of
-                Just (Route.InternalRoute a) ->
-                    { data = a
-                    , cmd =
-                        Effect.Browser.Navigation.replaceUrl
-                            key
-                            (Route.encode (Route.InternalRoute { a | page = WorldRoute, loginOrInviteToken = Nothing }))
-                    }
-
-                Nothing ->
-                    { data = { viewPoint = Route.startPointAt, page = WorldRoute, loginOrInviteToken = Nothing }
-                    , cmd = Effect.Browser.Navigation.replaceUrl key (Route.encode defaultRoute)
-                    }
-    in
     ( Loading
         { key = key
         , windowSize = ( Pixels.pixels 1920, Pixels.pixels 1080 )
@@ -209,7 +189,7 @@ init url key =
         , devicePixelRatio = 1
         , zoomFactor = 1
         , time = Nothing
-        , viewPoint = data.viewPoint
+        , viewPoint = Coord.origin
         , mousePosition = Point2d.origin
         , sounds = AssocList.empty
         , musicVolume = 0
@@ -221,12 +201,36 @@ init url key =
         }
     , Command.batch
         [ Effect.Lamdera.sendToBackend ConnectToBackend
-        , Command.sendToJs "user_agent_to_js" Ports.user_agent_to_js Json.Encode.null
         , Effect.Task.perform
             (\{ viewport } -> WindowResized (Coord.xy (round viewport.width) (round viewport.height)))
             Effect.Browser.Dom.getViewport
-        , cmd
-        , Ports.getLocalStorage
+        , Effect.WebGL.Texture.loadWith
+            { magnify = Effect.WebGL.Texture.nearest
+            , minify = Effect.WebGL.Texture.nearest
+            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
+            , verticalWrap = Effect.WebGL.Texture.clampToEdge
+            , flipY = False
+            }
+            "/texture.png"
+            |> Effect.Task.attempt TextureLoaded
+        , Effect.WebGL.Texture.loadWith
+            { magnify = Effect.WebGL.Texture.nearest
+            , minify = Effect.WebGL.Texture.nearest
+            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
+            , verticalWrap = Effect.WebGL.Texture.clampToEdge
+            , flipY = False
+            }
+            "/lights.png"
+            |> Effect.Task.attempt LightsTextureLoaded
+        , Effect.WebGL.Texture.loadWith
+            { magnify = Effect.WebGL.Texture.nearest
+            , minify = Effect.WebGL.Texture.nearest
+            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
+            , verticalWrap = Effect.WebGL.Texture.clampToEdge
+            , flipY = False
+            }
+            "/depth.png"
+            |> Effect.Task.attempt DepthTextureLoaded
         ]
     , Audio.cmdNone
     )
@@ -472,9 +476,6 @@ updateLoaded audioData msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        GotWebGlFix ->
-            ( model, Command.none )
-
         TrainDepthTextureLoaded result ->
             case result of
                 Ok texture ->
@@ -672,10 +673,10 @@ textInputUpdate textScale id textChanged onEnter textInput setTextInput event mo
             ( model2
             , case outMsg of
                 CopyText text ->
-                    Command.batch [ cmd, Ports.copyToClipboard text ]
+                    cmd
 
                 PasteText ->
-                    Command.batch [ cmd, Ports.readFromClipboardRequest ]
+                    cmd
 
                 NoOutMsg ->
                     cmd
@@ -746,10 +747,10 @@ textInputMultilineUpdate textScale width id textChanged textInput setTextInput e
             ( model2
             , case outMsg of
                 CopyText text ->
-                    Command.batch [ cmd, Ports.copyToClipboard text ]
+                    cmd
 
                 PasteText ->
-                    Command.batch [ cmd, Ports.readFromClipboardRequest ]
+                    cmd
 
                 NoOutMsg ->
                     cmd
@@ -1223,9 +1224,7 @@ subscriptions _ model =
         , Keyboard.downs KeyDown
         , case model of
             Loading _ ->
-                Subscription.batch
-                    [ Ports.gotWebGlFix GotWebGlFix
-                    ]
+                Subscription.none
 
             Loaded loaded ->
                 Subscription.batch

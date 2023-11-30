@@ -1,6 +1,5 @@
 module LoadingPage exposing
-    ( createReportsMesh
-    , cursorActualPosition
+    ( cursorActualPosition
     , cursorPosition
     , devicePixelRatioChanged
     , handleOutMsg
@@ -131,40 +130,6 @@ update msg loadingModel =
 
         AnimationFrame time ->
             ( Loading { loadingModel | time = Just time }, Command.none, Audio.cmdNone )
-
-        GotWebGlFix ->
-            ( Loading loadingModel
-            , Command.batch
-                [ Effect.WebGL.Texture.loadWith
-                    { magnify = Effect.WebGL.Texture.nearest
-                    , minify = Effect.WebGL.Texture.nearest
-                    , horizontalWrap = Effect.WebGL.Texture.clampToEdge
-                    , verticalWrap = Effect.WebGL.Texture.clampToEdge
-                    , flipY = False
-                    }
-                    "/texture.png"
-                    |> Effect.Task.attempt TextureLoaded
-                , Effect.WebGL.Texture.loadWith
-                    { magnify = Effect.WebGL.Texture.nearest
-                    , minify = Effect.WebGL.Texture.nearest
-                    , horizontalWrap = Effect.WebGL.Texture.clampToEdge
-                    , verticalWrap = Effect.WebGL.Texture.clampToEdge
-                    , flipY = False
-                    }
-                    "/lights.png"
-                    |> Effect.Task.attempt LightsTextureLoaded
-                , Effect.WebGL.Texture.loadWith
-                    { magnify = Effect.WebGL.Texture.nearest
-                    , minify = Effect.WebGL.Texture.nearest
-                    , horizontalWrap = Effect.WebGL.Texture.clampToEdge
-                    , verticalWrap = Effect.WebGL.Texture.clampToEdge
-                    , flipY = False
-                    }
-                    "/depth.png"
-                    |> Effect.Task.attempt DepthTextureLoaded
-                ]
-            , Audio.cmdNone
-            )
 
         _ ->
             ( Loading loadingModel, Command.none, Audio.cmdNone )
@@ -387,63 +352,6 @@ handleOutMsg isFromBackend ( model, outMsg ) =
     case outMsg of
         LocalGrid.NoOutMsg ->
             ( model, Command.none )
-
-
-createReportsMesh : List Report -> IdDict UserId (Nonempty BackendReport) -> Effect.WebGL.Mesh Vertex
-createReportsMesh localReports adminReports =
-    List.concatMap
-        (\( _, reports ) ->
-            List.Nonempty.toList reports
-                |> List.concatMap
-                    (\report ->
-                        Sprite.spriteWithColor
-                            Color.adminReportColor
-                            (Coord.multiply Units.tileSize report.position)
-                            Units.tileSize
-                            (Coord.xy 100 738)
-                            Units.tileSize
-                    )
-        )
-        (IdDict.toList adminReports)
-        ++ List.concatMap
-            (\report ->
-                Sprite.spriteWithColor
-                    Color.localReportColor
-                    (Coord.multiply Units.tileSize report.position)
-                    Units.tileSize
-                    (Coord.xy 100 738)
-                    Units.tileSize
-            )
-            localReports
-        |> Sprite.toMesh
-
-
-loadSimplexTexture : Effect.Task.Task FrontendOnly Effect.WebGL.Texture.Error Texture
-loadSimplexTexture =
-    let
-        table =
-            Terrain.permutationTable
-
-        {- Copied from Simplex.grad3 -}
-        grad3 : List Int
-        grad3 =
-            [ 1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1, 0, 1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, -1, 0, 1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1 ]
-                |> List.map (\a -> a + 1)
-    in
-    Effect.WebGL.Texture.loadWith
-        { magnify = Effect.WebGL.Texture.nearest
-        , minify = Effect.WebGL.Texture.nearest
-        , horizontalWrap = Effect.WebGL.Texture.clampToEdge
-        , verticalWrap = Effect.WebGL.Texture.clampToEdge
-        , flipY = False
-        }
-        (Image.fromList2d
-            [ Array.toList table.perm
-            , Array.toList table.permMod12
-            , grad3 ++ List.repeat (512 - List.length grad3) 0
-            ]
-            |> Image.toPngUrl
-        )
 
 
 windowResizedUpdate :

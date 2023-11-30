@@ -628,7 +628,6 @@ fragmentShader :
         }
 fragmentShader =
     [glsl|
-#extension GL_EXT_frag_depth : enable
 precision mediump float;
 uniform sampler2D texture;
 uniform sampler2D lights;
@@ -663,8 +662,6 @@ void main () {
             : vcoord;
 
     vec4 textureColor = texture2D(texture, vcoord2);
-
-    gl_FragDepthEXT = texture2D(depth, vcoord2).x + z2;
 
     if (textureColor.a == 0.0) {
         discard;
