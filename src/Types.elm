@@ -21,13 +21,10 @@ module Types exposing
     , ToolButton(..)
     , TopMenu(..)
     , UiHover(..)
-    , UpdateMeshesData
     , UserSettings
     , ViewPoint(..)
     )
 
-import AdminPage
-import Animal exposing (Animal)
 import AssocList
 import AssocSet
 import Audio
@@ -42,7 +39,6 @@ import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time
 import Effect.WebGL.Texture exposing (Texture)
 import Html.Events.Extra.Mouse exposing (Button)
-import Html.Events.Extra.Wheel
 import Id exposing (AnimalId, EventId, Id, MailId, OneTimePasswordId, PersonId, SecretId, TrainId, UserId)
 import IdDict exposing (IdDict)
 import Keyboard
@@ -50,7 +46,6 @@ import Lamdera
 import List.Nonempty exposing (Nonempty)
 import LocalGrid exposing (LocalGrid)
 import LocalModel exposing (LocalModel)
-import MailEditor exposing (BackendMail, FrontendMail)
 import PingData exposing (PingData)
 import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
@@ -59,11 +54,10 @@ import Sprite exposing (Vertex)
 import TextInput
 import Tile exposing (Category, Tile, TileGroup)
 import Time
-import Tool exposing (Tool)
-import Train exposing (Train)
 import Ui
 import Units exposing (CellUnit, WorldUnit)
 import Url exposing (Url)
+import User exposing (FrontendUser)
 import WebGL
 
 
@@ -103,8 +97,6 @@ type LoadingLocalModel
 
 type alias LoadedLocalModel_ =
     { localModel : LocalModel Change LocalGrid
-    , trains : IdDict TrainId Train
-    , mail : IdDict MailId FrontendMail
     }
 
 
@@ -160,21 +152,6 @@ type alias FrontendLoaded =
     }
 
 
-type alias UpdateMeshesData =
-    { localModel : LocalModel Change LocalGrid
-    , pressedKeys : List Keyboard.Key
-    , currentTool : Tool
-    , mouseLeft : MouseButtonState
-    , windowSize : Coord Pixels
-    , devicePixelRatio : Float
-    , zoomFactor : Int
-    , mouseMiddle : MouseButtonState
-    , viewPoint : ViewPoint
-    , trains : IdDict TrainId Train
-    , time : Effect.Time.Posix
-    }
-
-
 type alias ContextMenu =
     { change :
         Maybe
@@ -225,49 +202,7 @@ type Hover
 
 
 type UiHover
-    = EmailAddressTextInputHover
-    | SendEmailButtonHover
-    | ToolButtonHover ToolButton
-    | PrimaryColorInput
-    | SecondaryColorInput
-    | ShowInviteUser
-    | CloseInviteUser
-    | SubmitInviteUser
-    | InviteEmailAddressTextInput
-    | LowerMusicVolume
-    | RaiseMusicVolume
-    | LowerSoundEffectVolume
-    | RaiseSoundEffectVolume
-    | SettingsButton
-    | CloseSettings
-    | DisplayNameTextInput
-    | MailEditorHover MailEditor.Hover
-    | YouGotMailButton
-    | ShowMapButton
-    | AllowEmailNotificationsCheckbox
-    | UsersOnlineButton
-    | CopyPositionUrlButton
-    | ZoomInButton
-    | ZoomOutButton
-    | RotateLeftButton
-    | RotateRightButton
-    | AutomaticTimeOfDayButton
-    | AlwaysDayTimeOfDayButton
-    | AlwaysNightTimeOfDayButton
-    | ShowAdminPage
-    | AdminHover AdminPage.Hover
-    | CategoryButton Category
-    | NotificationsButton
-    | CloseNotifications
-    | MapChangeNotification (Coord WorldUnit)
-    | ShowInviteTreeButton
-    | CloseInviteTreeButton
-    | LogoutButton
-    | ClearNotificationsButton
-    | OneTimePasswordInput
-    | HyperlinkInput
-    | CategoryNextPageButton
-    | CategoryPreviousPageButton
+    = DefaultButton
 
 
 type alias BackendModel =
@@ -301,12 +236,9 @@ type FrontendMsg_
     | MouseDown Button (Point2d Pixels Pixels)
     | MouseUp Button (Point2d Pixels Pixels)
     | MouseMove (Point2d Pixels Pixels)
-    | MouseWheel Html.Events.Extra.Wheel.Event
     | MouseLeave
-    | ShortIntervalElapsed Effect.Time.Posix
     | AnimationFrame Effect.Time.Posix
     | SoundLoaded Sound (Result Audio.LoadError Audio.Source)
-    | VisibilityChanged
     | GotWebGlFix
 
 
@@ -330,5 +262,6 @@ type ToFrontend
 
 
 type alias LoadingData_ =
-    { users : List (Id UserId)
+    { userId : Id UserId
+    , users : IdDict UserId FrontendUser
     }

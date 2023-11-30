@@ -12,7 +12,6 @@ module Change exposing
     , ServerChange(..)
     , TileHotkey(..)
     , UserStatus(..)
-    , ViewBoundsChange2
     , tileHotkeyDict
     )
 
@@ -20,17 +19,11 @@ import Animal exposing (Animal)
 import Array exposing (Array)
 import AssocList
 import Bounds exposing (Bounds)
-import Color exposing (Colors)
 import Coord exposing (Coord, RawCellCoord)
-import Cursor
 import Dict exposing (Dict)
-import DisplayName exposing (DisplayName)
 import Duration exposing (Duration)
 import Effect.Time
 import EmailAddress exposing (EmailAddress)
-import Grid
-import GridCell
-import Hyperlink exposing (Hyperlink)
 import Id exposing (AnimalId, EventId, Id, MailId, TrainId, UserId)
 import IdDict exposing (IdDict)
 import List.Nonempty exposing (Nonempty)
@@ -39,9 +32,7 @@ import Point2d exposing (Point2d)
 import Set exposing (Set)
 import Tile exposing (TileGroup)
 import TimeOfDay exposing (TimeOfDay)
-import Train exposing (TrainDiff)
 import Units exposing (CellUnit, WorldUnit)
-import User exposing (FrontendUser)
 
 
 type Change
@@ -52,14 +43,6 @@ type Change
 type LocalChange
     = SelectCharacter
     | InvalidChange
-
-
-type alias ViewBoundsChange2 =
-    { viewBounds : Bounds CellUnit
-    , previewBounds : Maybe (Bounds CellUnit)
-    , newCells : List ( Coord CellUnit, GridCell.CellData )
-    , newCows : List ( Id AnimalId, Animal )
-    }
 
 
 tileHotkeyDict : Dict String TileHotkey

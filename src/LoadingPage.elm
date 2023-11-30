@@ -1,52 +1,38 @@
 module LoadingPage exposing
-    ( animalActualPosition
-    , canPlaceTile
-    , createReportsMesh
+    ( createReportsMesh
     , cursorActualPosition
     , cursorPosition
     , devicePixelRatioChanged
-    , getHandColor
     , handleOutMsg
     , hoverAt
     , loadingCanvasView
-    , loadingCellBounds
     , mouseListeners
     , mouseScreenPosition
     , mouseWorldPosition
     , shortDelayDuration
-    , showWorldPreview
     , update
     , updateLocalModel
     , windowResizedUpdate
     )
 
-import Animal exposing (Animal)
 import Array
 import AssocList
 import Audio exposing (AudioCmd)
-import BoundingBox2d exposing (BoundingBox2d)
 import Bounds exposing (Bounds)
 import Change exposing (BackendReport, Change(..), Report, UserStatus(..))
-import Codec
 import Color exposing (Colors)
 import Coord exposing (Coord)
 import Cursor exposing (Cursor)
-import Dict exposing (Dict)
 import Duration exposing (Duration)
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.File.Download
-import Effect.File.Select
 import Effect.Lamdera
 import Effect.Task
 import Effect.Time as Time
 import Effect.WebGL
 import Effect.WebGL.Texture exposing (Texture)
-import Grid exposing (Grid)
-import GridCell exposing (FrontendHistory)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Mouse exposing (Button(..))
-import Hyperlink
 import Id exposing (AnimalId, Id, TrainId, UserId)
 import IdDict exposing (IdDict)
 import Image
@@ -54,30 +40,21 @@ import Keyboard
 import List.Extra as List
 import List.Nonempty exposing (Nonempty(..))
 import LocalGrid exposing (LocalGrid, LocalGrid_)
-import LocalModel exposing (LocalModel)
-import MailEditor
 import Math.Matrix4 as Mat4
 import Math.Vector4 as Vec4
 import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
 import Ports
 import Quantity exposing (Quantity)
-import Random
-import Set exposing (Set)
 import Shaders
 import Sound
 import Sprite exposing (Vertex)
 import Terrain
-import TextInput
-import TextInputMultiline
-import Tile exposing (Category(..), Tile(..), TileGroup(..))
 import Tool exposing (Tool(..))
 import Toolbar
-import Train exposing (Train)
-import Types exposing (CssPixels, FrontendLoaded, FrontendLoading, FrontendModel_(..), FrontendMsg_(..), Hover(..), LoadedLocalModel_, LoadingLocalModel(..), MouseButtonState(..), SubmitStatus(..), ToBackend(..), ToolButton(..), UiHover(..), UpdateMeshesData, ViewPoint(..))
+import Types exposing (CssPixels, FrontendLoaded, FrontendLoading, FrontendModel_(..), FrontendMsg_(..), Hover(..), LoadedLocalModel_, LoadingLocalModel(..), MouseButtonState(..), SubmitStatus(..), ToBackend(..), ToolButton(..), UiHover(..), ViewPoint(..))
 import Ui
 import Units exposing (CellUnit, WorldUnit)
-import Vector2d
 import WebGL.Texture
 
 
@@ -230,15 +207,6 @@ loadedInit :
     -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
 loadedInit time loading texture lightsTexture depthTexture loadedLocalModel =
     let
-        currentTool2 =
-            HandTool
-
-        defaultTileColors =
-            AssocList.empty
-
-        currentUserId2 =
-            LocalGrid.currentUserId loadedLocalModel
-
         viewpoint =
             Coord.toPoint2d loading.viewPoint |> NormalViewPoint
 
@@ -247,21 +215,6 @@ loadedInit time loading texture lightsTexture depthTexture loadedLocalModel =
 
         mouseMiddle =
             MouseButtonUp { current = loading.mousePosition }
-
-        previousUpdateMeshData : UpdateMeshesData
-        previousUpdateMeshData =
-            { localModel = loadedLocalModel.localModel
-            , pressedKeys = []
-            , currentTool = currentTool2
-            , mouseLeft = mouseLeft
-            , mouseMiddle = mouseMiddle
-            , windowSize = loading.windowSize
-            , devicePixelRatio = loading.devicePixelRatio
-            , zoomFactor = loading.zoomFactor
-            , viewPoint = viewpoint
-            , trains = loadedLocalModel.trains
-            , time = time
-            }
 
         model : FrontendLoaded
         model =
@@ -338,85 +291,6 @@ loadedInit time loading texture lightsTexture depthTexture loadedLocalModel =
         |> (\( a, b ) -> ( Loaded a, b, Audio.cmdNone ))
 
 
-canPlaceTile : Time.Posix -> Grid.GridChange -> IdDict TrainId Train -> Grid a -> Bool
-canPlaceTile time change trains grid =
-    if Grid.canPlaceTile change then
-        let
-            ( cellPosition, localPosition ) =
-                Grid.worldToCellAndLocalCoord change.position
-        in
-        ( cellPosition, localPosition )
-            :: Grid.closeNeighborCells cellPosition localPosition
-            |> List.any
-                (\( cellPos, localPos ) ->
-                    case Grid.getCell cellPos grid of
-                        Just cell ->
-                            GridCell.flatten cell
-                                |> List.any
-                                    (\value ->
-                                        if value.tile == TrainHouseLeft || value.tile == TrainHouseRight then
-                                            if Tile.hasCollision localPos change.change value.position value.tile then
-                                                case
-                                                    Train.canRemoveTiles time
-                                                        [ { tile = value.tile
-                                                          , position =
-                                                                Grid.cellAndLocalCoordToWorld ( cellPos, value.position )
-                                                          }
-                                                        ]
-                                                        trains
-                                                of
-                                                    Ok _ ->
-                                                        False
-
-                                                    Err _ ->
-                                                        True
-
-                                            else
-                                                False
-
-                                        else
-                                            False
-                                    )
-
-                        Nothing ->
-                            False
-                )
-            |> not
-        --case Train.canRemoveTiles time removed trains of
-        --    Ok _ ->
-        --        True
-        --
-        --    Err _ ->
-        --        False
-
-    else
-        False
-
-
-expandHyperlink : Coord Units.CellLocalUnit -> List GridCell.Value -> Coord Units.CellLocalUnit
-expandHyperlink startPos flattenedValues =
-    let
-        nextPos =
-            Coord.plus (Coord.xy -1 0) startPos
-    in
-    if
-        List.any
-            (\value ->
-                case value.tile of
-                    BigText _ ->
-                        nextPos == value.position
-
-                    _ ->
-                        False
-            )
-            flattenedValues
-    then
-        expandHyperlink nextPos flattenedValues
-
-    else
-        startPos
-
-
 mouseWorldPosition :
     { a
         | mouseLeft : MouseButtonState
@@ -425,9 +299,7 @@ mouseWorldPosition :
         , zoomFactor : Int
         , mouseMiddle : MouseButtonState
         , viewPoint : ViewPoint
-        , trains : IdDict TrainId Train
         , time : Time.Posix
-        , currentTool : Tool
     }
     -> Point2d WorldUnit WorldUnit
 mouseWorldPosition model =
@@ -454,30 +326,13 @@ cursorPosition :
             , zoomFactor : Int
             , mouseMiddle : MouseButtonState
             , viewPoint : ViewPoint
-            , trains : IdDict TrainId Train
             , time : Time.Posix
-            , currentTool : Tool
         }
     -> Coord WorldUnit
 cursorPosition tileData model =
     mouseWorldPosition model
         |> Coord.floorPoint
         |> Coord.minus (tileData.size |> Coord.divide (Coord.tuple ( 2, 2 )))
-
-
-getHandColor : Id UserId -> { a | localModel : LocalModel b LocalGrid } -> Colors
-getHandColor userId model =
-    let
-        localGrid : LocalGrid_
-        localGrid =
-            LocalGrid.localModel model.localModel
-    in
-    case IdDict.get userId localGrid.users of
-        Just { handColor } ->
-            handColor
-
-        Nothing ->
-            Cursor.defaultColors
 
 
 updateLocalModel : Change.LocalChange -> FrontendLoaded -> ( FrontendLoaded, LocalGrid.OutMsg )
@@ -514,33 +369,6 @@ hoverAt model mousePosition =
             MapHover
 
 
-animalActualPosition : Id AnimalId -> FrontendLoaded -> Maybe { position : Point2d WorldUnit WorldUnit, isHeld : Bool }
-animalActualPosition animalId model =
-    let
-        localGrid =
-            LocalGrid.localModel model.localModel
-    in
-    case
-        IdDict.toList localGrid.cursors
-            |> List.find (\( _, cursor ) -> Just animalId == Maybe.map .cowId cursor.holdingCow)
-    of
-        Just ( userId, cursor ) ->
-            { position =
-                cursorActualPosition (Just userId == LocalGrid.currentUserId model) userId cursor model
-                    |> Point2d.translateBy (Vector2d.unsafe { x = 0, y = 0.2 })
-            , isHeld = True
-            }
-                |> Just
-
-        Nothing ->
-            case IdDict.get animalId localGrid.animals of
-                Just animal ->
-                    { position = Animal.actualPositionWithoutCursor model.time animal, isHeld = False } |> Just
-
-                Nothing ->
-                    Nothing
-
-
 cursorActualPosition : Bool -> Id UserId -> Cursor -> FrontendLoaded -> Point2d WorldUnit WorldUnit
 cursorActualPosition isCurrentUser userId cursor model =
     cursor.position
@@ -551,21 +379,6 @@ shortDelayDuration =
     Duration.milliseconds 100
 
 
-showWorldPreview : Hover -> Maybe ( Coord WorldUnit, { position : Coord Pixels } )
-showWorldPreview hoverAt2 =
-    case hoverAt2 of
-        UiHover id data ->
-            case id of
-                MapChangeNotification changeAt ->
-                    Just ( changeAt, data )
-
-                _ ->
-                    Nothing
-
-        _ ->
-            Nothing
-
-
 handleOutMsg :
     Bool
     -> ( FrontendLoaded, LocalGrid.OutMsg )
@@ -574,177 +387,6 @@ handleOutMsg isFromBackend ( model, outMsg ) =
     case outMsg of
         LocalGrid.NoOutMsg ->
             ( model, Command.none )
-
-        LocalGrid.TilesRemoved _ ->
-            ( model, Command.none )
-
-        LocalGrid.OtherUserCursorMoved { userId, previousPosition } ->
-            ( { model
-                | previousCursorPositions =
-                    case previousPosition of
-                        Just previousPosition2 ->
-                            IdDict.insert
-                                userId
-                                { position = previousPosition2, time = model.time }
-                                model.previousCursorPositions
-
-                        Nothing ->
-                            IdDict.remove userId model.previousCursorPositions
-              }
-            , Command.none
-            )
-
-        LocalGrid.HandColorOrNameChanged userId ->
-            ( case LocalGrid.localModel model.localModel |> .users |> IdDict.get userId of
-                Just user ->
-                    { model
-                        | handMeshes =
-                            IdDict.insert
-                                userId
-                                (Cursor.meshes
-                                    (if Just userId == LocalGrid.currentUserId model then
-                                        Nothing
-
-                                     else
-                                        Just ( userId, user.name )
-                                    )
-                                    user.handColor
-                                )
-                                model.handMeshes
-                    }
-
-                Nothing ->
-                    model
-            , Command.none
-            )
-
-        LocalGrid.RailToggledByAnother position ->
-            ( handleRailToggleSound position model, Command.none )
-
-        LocalGrid.RailToggledBySelf position ->
-            ( if isFromBackend then
-                model
-
-              else
-                handleRailToggleSound position model
-            , Command.none
-            )
-
-        LocalGrid.TeleportTrainHome trainId ->
-            ( { model | trains = IdDict.update2 trainId (Train.startTeleportingHome model.time) model.trains }
-            , Command.none
-            )
-
-        LocalGrid.TrainLeaveHome trainId ->
-            ( { model | trains = IdDict.update2 trainId (Train.leaveHome model.time) model.trains }
-            , Command.none
-            )
-
-        LocalGrid.TrainsUpdated diff ->
-            ( { model
-                | trains =
-                    IdDict.toList diff
-                        |> List.filterMap
-                            (\( trainId, diff_ ) ->
-                                case IdDict.get trainId model.trains |> Train.applyDiff diff_ of
-                                    Just newTrain ->
-                                        Just ( trainId, newTrain )
-
-                                    Nothing ->
-                                        Nothing
-                            )
-                        |> IdDict.fromList
-              }
-            , Command.none
-            )
-
-        LocalGrid.ReceivedMail ->
-            ( { model | lastReceivedMail = Just model.time }, Command.none )
-
-        LocalGrid.ExportMail content ->
-            ( model
-            , Effect.File.Download.string
-                "letter.json"
-                "application/json"
-                (Codec.encodeToString 2 (Codec.list MailEditor.contentCodec) content)
-            )
-
-        LocalGrid.ImportMail ->
-            ( model, Effect.File.Select.file [ "application/json" ] ImportedMail )
-
-        LocalGrid.LoggedOut ->
-            ( { model
-                | loginError = Nothing
-                , loginEmailInput = TextInput.init
-                , oneTimePasswordInput = TextInput.init
-                , topMenuOpened = Nothing
-                , pressedSubmitEmail = NotSubmitted { pressedSubmit = False }
-                , inviteSubmitStatus = NotSubmitted { pressedSubmit = False }
-              }
-            , Command.none
-            )
-
-        LocalGrid.VisitedHyperlinkOutMsg hyperlink ->
-            ( hardUpdateMeshes model
-            , if isFromBackend then
-                Command.none
-
-              else
-                Ports.openNewTab hyperlink
-            )
-
-
-handleRailToggleSound : Coord WorldUnit -> FrontendLoaded -> FrontendLoaded
-handleRailToggleSound position model =
-    { model
-        | railToggles =
-            ( model.time, position )
-                :: List.filter
-                    (\( time, _ ) ->
-                        Duration.from time model.time
-                            |> Quantity.lessThan Duration.second
-                    )
-                    model.railToggles
-    }
-
-
-loadingCellBounds : FrontendLoaded -> Bounds CellUnit
-loadingCellBounds model =
-    let
-        { minX, minY, maxX, maxY } =
-            viewLoadingBoundingBox model |> BoundingBox2d.extrema
-
-        min_ =
-            Point2d.xy minX minY |> Coord.floorPoint |> Grid.worldToCellAndLocalCoord |> Tuple.first
-
-        max_ =
-            Point2d.xy maxX maxY
-                |> Coord.floorPoint
-                |> Grid.worldToCellAndLocalCoord
-                |> Tuple.first
-                |> Coord.plus ( Units.cellUnit 1, Units.cellUnit 1 )
-
-        bounds =
-            Bounds.bounds min_ max_
-    in
-    bounds
-
-
-viewLoadingBoundingBox : FrontendLoaded -> BoundingBox2d WorldUnit WorldUnit
-viewLoadingBoundingBox model =
-    let
-        viewMin =
-            Toolbar.screenToWorld model Point2d.origin
-                |> Point2d.translateBy
-                    (Coord.tuple ( -2, -2 )
-                        |> Units.cellToTile
-                        |> Coord.toVector2d
-                    )
-
-        viewMax =
-            Toolbar.screenToWorld model (Coord.toPoint2d model.windowSize)
-    in
-    BoundingBox2d.from viewMin viewMax
 
 
 createReportsMesh : List Report -> IdDict UserId (Nonempty BackendReport) -> Effect.WebGL.Mesh Vertex

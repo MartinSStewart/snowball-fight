@@ -47,7 +47,6 @@ import Effect.Time
 import Effect.WebGL
 import Flag
 import Frame2d
-import Grid
 import Id exposing (Id, MailId, TrainId, UserId)
 import IdDict exposing (IdDict)
 import Keyboard exposing (Key(..))
@@ -1454,97 +1453,9 @@ sendLetterButton idMap ( userId, name ) =
         (Ui.text ("Send letter to " ++ DisplayName.nameAndId name userId))
 
 
-submittedView : (Hover -> id) -> DisplayName -> Ui.Element id
-submittedView idMap name =
-    let
-        paragraph1 =
-            Ui.row
-                { padding = Ui.noPadding, spacing = 16 }
-                [ Ui.wrappedText 400 "Your letter is now waiting at your post office."
-                , yourPostOffice
-                ]
-    in
-    Ui.el
-        { padding = Ui.paddingXY 16 16
-        , borderAndFill =
-            BorderAndFill
-                { borderWidth = 2
-                , borderColor = Color.outlineColor
-                , fillColor = Color.fillColor
-                }
-        , inFront = []
-        }
-        (Ui.column
-            { spacing = 16, padding = Ui.noPadding }
-            [ paragraph1
-            , Ui.wrappedText
-                (Ui.size paragraph1 |> Coord.xRaw)
-                ("Send a train to pick it up and deliver it to "
-                    ++ DisplayName.toString name
-                    ++ "'s post office."
-                )
-            , Ui.button
-                { id = idMap CloseSendLetterInstructionsButton
-                , padding = Ui.paddingXY 16 8
-                }
-                (Ui.text "Close")
-            ]
-        )
-
-
 grassSize : Coord Pixels
 grassSize =
     Coord.xy 80 72
-
-
-yourPostOffice : Ui.Element id
-yourPostOffice =
-    Ui.quads
-        { size = Tile.getData Tile.PostOffice |> .size |> Coord.multiply Units.tileSize |> Coord.scalar 2
-        , vertices =
-            Sprite.sprite
-                (Coord.yOnly Units.tileSize |> Coord.scalar 2)
-                (Coord.scalar 2 grassSize)
-                (Coord.xy 220 216)
-                grassSize
-                ++ Sprite.sprite
-                    Coord.origin
-                    (Coord.scalar 2 grassSize)
-                    (Coord.xy 220 216)
-                    grassSize
-                ++ tileMesh
-                    Tile.PostOffice
-                    Coord.origin
-                    2
-                    (Tile.defaultToPrimaryAndSecondary Tile.defaultPostOfficeColor)
-                ++ Flag.flagMesh
-                    (Coord.scalar 2 Flag.postOfficeSendingMailFlagOffset2)
-                    2
-                    Flag.sendingMailFlagColor
-                    1
-        }
-
-
-tileMesh : Tile -> Coord Pixels -> Int -> Colors -> List Vertex
-tileMesh tile position scale colors =
-    let
-        data : TileData unit
-        data =
-            Tile.getData tile
-    in
-    Grid.tileMeshHelper2
-        Sprite.opaque
-        colors
-        position
-        (case tile of
-            BigText _ ->
-                2 * scale
-
-            _ ->
-                scale
-        )
-        data.texturePosition
-        (Coord.scalar scale data.size)
 
 
 mailView : Int -> List Content -> Maybe Tool -> Ui.Element id
@@ -1813,20 +1724,7 @@ inboxView idMap users inbox model =
                             { spacing = 8, padding = Ui.noPadding }
                             [ case IdDict.get mail.from users of
                                 Just user ->
-                                    let
-                                        name =
-                                            DisplayName.nameAndId user.name mail.from |> String.padRight 15 ' '
-                                    in
-                                    Ui.text
-                                        ((if mail.isViewed then
-                                            "      "
-
-                                          else
-                                            "(new) "
-                                         )
-                                            ++ name
-                                            ++ date mail.deliveryTime
-                                        )
+                                    Ui.text ""
 
                                 Nothing ->
                                     Ui.text "Not found"
@@ -1872,7 +1770,7 @@ inboxView idMap users inbox model =
                                 , "From:"
                                     ++ (case IdDict.get mail.from users of
                                             Just user ->
-                                                DisplayName.nameAndId user.name mail.from
+                                                "Not found"
 
                                             Nothing ->
                                                 "Not found"
@@ -1927,36 +1825,7 @@ ui :
     -> Model
     -> Ui.Element uiHover
 ui isDisconnected windowSize idMap users inbox model =
-    Ui.el
-        { padding = Ui.noPadding
-        , borderAndFill = NoBorderOrFill
-        , inFront =
-            (if isDisconnected then
-                [ disconnectWarning windowSize ]
-
-             else
-                []
-            )
-                ++ (case ( model.submitStatus, model.to ) of
-                        ( Submitted, Just ( _, name ) ) ->
-                            [ Ui.center { size = windowSize } (submittedView idMap name) ]
-
-                        ( NotSubmitted, Just userIdAndName ) ->
-                            editorView idMap userIdAndName windowSize model
-
-                        ( _, Nothing ) ->
-                            [ Ui.center { size = windowSize } (inboxView idMap users inbox model) ]
-                   )
-        }
-        (Ui.customButton
-            { id = idMap BackgroundHover
-            , inFront = []
-            , padding = { topLeft = windowSize, bottomRight = Coord.origin }
-            , borderAndFill = NoBorderOrFill
-            , borderAndFillFocus = NoBorderOrFill
-            }
-            Ui.none
-        )
+    Ui.none
 
 
 disconnectWarning : Coord Pixels -> Ui.Element id

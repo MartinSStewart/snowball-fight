@@ -5,7 +5,6 @@
 const devicePixelRatio = require('./elm-pkg-js/devicePixelRatio.js');
 const copyToClipboard = require('./elm-pkg-js/copy-to-clipboard.js');
 const elmAudio = require('./elm-pkg-js/elmAudio.js');
-const openNewTab = require('./elm-pkg-js/openNewTab.js');
 
 exports.init = async function init(app) {
   // @WARNING: this only runs for Lamdera production deploys!
@@ -14,5 +13,4 @@ exports.init = async function init(app) {
   devicePixelRatio.init(app);
   copyToClipboard.init(app);
   elmAudio.init(app);
-  openNewTab.init(app);
 }

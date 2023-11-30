@@ -7,7 +7,7 @@ import Array exposing (Array)
 import AssocSet
 import Bytes exposing (Endianness(..))
 import Bytes.Decode
-import Change exposing (AdminChange(..), AdminData, AreTrainsAndAnimalsDisabled(..), LocalChange(..), ServerChange(..), UserStatus(..), ViewBoundsChange2)
+import Change exposing (AdminChange(..), AdminData, AreTrainsAndAnimalsDisabled(..), LocalChange(..), ServerChange(..), UserStatus(..))
 import Crypto.Hash
 import Dict
 import Duration exposing (Duration)
@@ -18,6 +18,7 @@ import Effect.Task
 import Effect.Time
 import Env
 import Id exposing (AnimalId, EventId, Id, MailId, OneTimePasswordId, SecretId, TrainId, UserId)
+import IdDict
 import Lamdera
 import List.Extra as List
 import List.Nonempty as Nonempty exposing (Nonempty(..))
@@ -341,33 +342,44 @@ addSession :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 addSession sessionId clientId model =
-    ( { model
-        | userSessions =
-            Dict.update
-                (Effect.Lamdera.sessionIdToString sessionId)
-                (\maybeSession ->
-                    (case maybeSession of
-                        Just session ->
-                            { clientIds = AssocSet.insert clientId session.clientIds
-                            , userId = session.userId
-                            }
+    let
+        model2 =
+            { model
+                | userSessions =
+                    Dict.update
+                        (Effect.Lamdera.sessionIdToString sessionId)
+                        (\maybeSession ->
+                            (case maybeSession of
+                                Just session ->
+                                    { clientIds = AssocSet.insert clientId session.clientIds
+                                    , userId = session.userId
+                                    }
 
-                        Nothing ->
-                            { clientIds = AssocSet.singleton clientId
-                            , userId = Id.fromInt model.userIdCounter
-                            }
-                    )
-                        |> Just
-                )
-                model.userSessions
-        , userIdCounter = model.userIdCounter + 1
-      }
-    , LoadingData
-        { users =
-            Dict.toList model.userSessions
-                |> List.map (\( _, session ) -> session.userId)
-        }
-        |> Effect.Lamdera.sendToFrontend clientId
+                                Nothing ->
+                                    { clientIds = AssocSet.singleton clientId
+                                    , userId = Id.fromInt model.userIdCounter
+                                    }
+                            )
+                                |> Just
+                        )
+                        model.userSessions
+                , userIdCounter = model.userIdCounter + 1
+            }
+    in
+    ( model2
+    , case Dict.get (Effect.Lamdera.sessionIdToString sessionId) model2.userSessions of
+        Just { userId } ->
+            LoadingData
+                { userId = userId
+                , users =
+                    Dict.toList model.userSessions
+                        |> List.map (\( _, session ) -> ( session.userId, {} ))
+                        |> IdDict.fromList
+                }
+                |> Effect.Lamdera.sendToFrontend clientId
+
+        Nothing ->
+            Command.none
     )
 
 
