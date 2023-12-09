@@ -84,14 +84,6 @@ update msg loadingModel =
                 Err _ ->
                     ( Loading loadingModel, Command.none, Audio.cmdNone )
 
-        LightsTextureLoaded result ->
-            case result of
-                Ok texture ->
-                    ( Loading { loadingModel | lightsTexture = Just texture }, Command.none, Audio.cmdNone )
-
-                Err _ ->
-                    ( Loading loadingModel, Command.none, Audio.cmdNone )
-
         DepthTextureLoaded result ->
             case result of
                 Ok texture ->
@@ -152,13 +144,12 @@ tryLoading frontendLoading =
             Nothing
 
         LoadedLocalModel loadedLocalModel ->
-            Maybe.map4
-                (\time texture lightsTexture depthTexture () ->
-                    loadedInit time frontendLoading texture lightsTexture depthTexture loadedLocalModel
+            Maybe.map3
+                (\time texture depthTexture () ->
+                    loadedInit time frontendLoading texture depthTexture loadedLocalModel
                 )
                 frontendLoading.time
                 frontendLoading.texture
-                frontendLoading.lightsTexture
                 frontendLoading.depthTexture
 
 
@@ -167,10 +158,9 @@ loadedInit :
     -> FrontendLoading
     -> Texture
     -> Texture
-    -> Texture
     -> LoadedLocalModel_
     -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_, AudioCmd FrontendMsg_ )
-loadedInit time loading texture lightsTexture depthTexture loadedLocalModel =
+loadedInit time loading texture depthTexture loadedLocalModel =
     let
         viewpoint =
             Coord.toPoint2d loading.viewPoint |> NormalViewPoint
@@ -187,10 +177,8 @@ loadedInit time loading texture lightsTexture depthTexture loadedLocalModel =
             , localModel = loadedLocalModel.localModel
             , viewPoint = viewpoint
             , texture = texture
-            , lightsTexture = lightsTexture
             , depthTexture = depthTexture
             , trainTexture = Nothing
-            , trainLightsTexture = Nothing
             , trainDepthTexture = Nothing
             , pressedKeys = []
             , windowSize = loading.windowSize
@@ -232,15 +220,6 @@ loadedInit time loading texture lightsTexture depthTexture loadedLocalModel =
             }
             "/trains.png"
             |> Effect.Task.attempt TrainTextureLoaded
-        , Effect.WebGL.Texture.loadWith
-            { magnify = Effect.WebGL.Texture.nearest
-            , minify = Effect.WebGL.Texture.nearest
-            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
-            , verticalWrap = Effect.WebGL.Texture.clampToEdge
-            , flipY = False
-            }
-            "/train-lights.png"
-            |> Effect.Task.attempt TrainLightsTextureLoaded
         , Effect.WebGL.Texture.loadWith
             { magnify = Effect.WebGL.Texture.nearest
             , minify = Effect.WebGL.Texture.nearest
@@ -453,11 +432,10 @@ loadingCanvasView model =
         )
         (case
             ( Maybe.andThen Effect.WebGL.Texture.unwrap model.texture
-            , Maybe.andThen Effect.WebGL.Texture.unwrap model.lightsTexture
             , Maybe.andThen Effect.WebGL.Texture.unwrap model.depthTexture
             )
          of
-            ( Just texture, Just lightsTexture, Just depth ) ->
+            ( Just texture, Just depth ) ->
                 let
                     textureSize =
                         WebGL.Texture.size texture |> Coord.tuple |> Coord.toVec2
@@ -475,7 +453,6 @@ loadingCanvasView model =
                             |> Coord.translateMat4 (Coord.tuple ( -windowWidth // 2, -windowHeight // 2 ))
                             |> Coord.translateMat4 (touchDevicesNotSupportedPosition model.windowSize)
                     , texture = texture
-                    , lights = lightsTexture
                     , depth = depth
                     , textureSize = textureSize
                     , color = Vec4.vec4 1 1 1 1
@@ -504,7 +481,6 @@ loadingCanvasView model =
                                             |> Coord.translateMat4 (Coord.tuple ( -windowWidth // 2, -windowHeight // 2 ))
                                             |> Coord.translateMat4 loadingTextPosition2
                                     , texture = texture
-                                    , lights = lightsTexture
                                     , depth = depth
                                     , textureSize = textureSize
                                     , color = Vec4.vec4 1 1 1 1
@@ -530,7 +506,6 @@ loadingCanvasView model =
                                                 (Coord.tuple ( -windowWidth // 2, -windowHeight // 2 ))
                                             |> Coord.translateMat4 (loadingTextPosition model.windowSize)
                                     , texture = texture
-                                    , lights = lightsTexture
                                     , depth = depth
                                     , textureSize = textureSize
                                     , color = Vec4.vec4 1 1 1 1

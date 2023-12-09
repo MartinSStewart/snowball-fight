@@ -15,12 +15,10 @@ module MailEditor exposing
     , SubmitStatus
     , TextUnit
     , Tool(..)
-    , backgroundLayer
     , contentCodec
     , cursorSprite
     , date
     , disconnectWarning
-    , drawMail
     , getMailFrom
     , getMailTo
     , handleKeyDown
@@ -1327,111 +1325,6 @@ screenToWorld windowSize model =
 scaleForScreenToWorld : Coord Pixels -> Quantity Float units
 scaleForScreenToWorld windowSize =
     1 / toFloat (mailZoomFactor windowSize) |> Quantity
-
-
-backgroundLayer : RenderData -> Effect.WebGL.Entity
-backgroundLayer { lights, nightFactor, texture, depth, time } =
-    Effect.WebGL.entityWith
-        [ Shaders.blend ]
-        Shaders.vertexShader
-        Shaders.fragmentShader
-        square
-        { color = Vec4.vec4 0.2 0.2 0.2 0.75
-        , view = Mat4.makeTranslate3 -1 -1 0 |> Mat4.scale3 2 2 1
-        , texture = texture
-        , lights = lights
-        , textureSize = WebGL.Texture.size texture |> Coord.tuple |> Coord.toVec2
-        , userId = Shaders.noUserIdSelected
-        , time = time
-        , night = nightFactor
-        , depth = depth
-        , waterReflection = 0
-        }
-
-
-drawMail :
-    RenderData
-    -> Coord Pixels
-    -> Coord Pixels
-    -> Point2d Pixels Pixels
-    -> Int
-    -> Int
-    -> { a | windowSize : Coord Pixels, time : Effect.Time.Posix, zoomFactor : Int }
-    -> Model
-    -> List Effect.WebGL.Entity
-drawMail { lights, nightFactor, texture, depth, time } mailPosition mailSize2 mousePosition windowWidth windowHeight config model =
-    let
-        zoomFactor : Float
-        zoomFactor =
-            mailZoomFactor (Coord.xy windowWidth windowHeight) |> toFloat
-
-        mousePosition_ : Coord UiPixelUnit
-        mousePosition_ =
-            screenToWorld (Coord.xy windowWidth windowHeight) config mousePosition
-                |> Coord.roundPoint
-
-        tilePosition : Coord UiPixelUnit
-        tilePosition =
-            mousePosition_
-
-        ( tileX, tileY ) =
-            Coord.toTuple tilePosition
-
-        mailHover : Bool
-        mailHover =
-            Bounds.fromCoordAndSize mailPosition mailSize2
-                |> Bounds.contains (Coord.floorPoint mousePosition)
-
-        showHoverImage : Bool
-        showHoverImage =
-            case model.currentTool of
-                ImagePlacer _ ->
-                    mailHover
-
-                _ ->
-                    False
-
-        textureSize =
-            WebGL.Texture.size texture |> Coord.tuple |> Coord.toVec2
-    in
-    if showHoverImage then
-        [ Effect.WebGL.entityWith
-            [ Shaders.blend ]
-            Shaders.vertexShader
-            Shaders.fragmentShader
-            model.currentImageMesh
-            { texture = texture
-            , lights = lights
-            , textureSize = textureSize
-            , color =
-                case model.currentTool of
-                    ImagePlacer _ ->
-                        Vec4.vec4 1 1 1 0.5
-
-                    EraserTool ->
-                        Vec4.vec4 1 1 1 1
-
-                    TextTool _ ->
-                        Vec4.vec4 1 1 1 1
-            , view =
-                Mat4.makeScale3
-                    (zoomFactor * 2 / toFloat windowWidth)
-                    (zoomFactor * -2 / toFloat windowHeight)
-                    1
-                    |> Mat4.translate3
-                        (toFloat tileX |> round |> toFloat)
-                        (toFloat tileY |> round |> toFloat)
-                        0
-            , userId = Shaders.noUserIdSelected
-            , time = time
-            , night = nightFactor
-            , depth = depth
-            , waterReflection = 0
-            }
-        ]
-
-    else
-        []
 
 
 mainColumnSpacing : number

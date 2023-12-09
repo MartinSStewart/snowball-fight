@@ -117,10 +117,8 @@ type alias FrontendLoaded =
     , localModel : LocalModel Change LocalGrid
     , viewPoint : ViewPoint
     , texture : Texture
-    , lightsTexture : Texture
     , depthTexture : Texture
     , trainTexture : Maybe Texture
-    , trainLightsTexture : Maybe Texture
     , trainDepthTexture : Maybe Texture
     , pressedKeys : List Keyboard.Key
     , windowSize : Coord Pixels
@@ -224,10 +222,8 @@ type FrontendMsg_
     | UrlChanged Url
     | NoOpFrontendMsg
     | TextureLoaded (Result Effect.WebGL.Texture.Error Texture)
-    | LightsTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
     | DepthTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
     | TrainTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
-    | TrainLightsTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
     | TrainDepthTextureLoaded (Result Effect.WebGL.Texture.Error Texture)
     | KeyMsg Keyboard.Msg
     | KeyDown Keyboard.RawKey

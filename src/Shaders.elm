@@ -9,7 +9,6 @@ module Shaders exposing
     , debrisVertexShader
     , depthTest
     , drawBackground
-    , drawWaterReflection
     , fragmentShader
     , instancedVertexShader
     , mapSize
@@ -57,7 +56,6 @@ type alias InstancedVertex =
 type alias RenderData =
     { nightFactor : Float
     , texture : WebGL.Texture.Texture
-    , lights : WebGL.Texture.Texture
     , depth : WebGL.Texture.Texture
     , staticViewMatrix : Mat4
     , viewMatrix : Mat4
@@ -253,7 +251,7 @@ drawBackground :
     RenderData
     -> Dict ( Int, Int ) { foreground : Effect.WebGL.Mesh Vertex, background : Effect.WebGL.Mesh Vertex }
     -> List Effect.WebGL.Entity
-drawBackground { nightFactor, viewMatrix, texture, lights, depth, time, scissors } meshes =
+drawBackground { nightFactor, viewMatrix, texture, depth, time, scissors } meshes =
     Dict.toList meshes
         |> List.map
             (\( _, mesh ) ->
@@ -273,7 +271,6 @@ drawBackground { nightFactor, viewMatrix, texture, lights, depth, time, scissors
                     , userId = noUserIdSelected
                     , time = time
                     , night = nightFactor
-                    , lights = lights
                     , depth = depth
                     , waterReflection = 0
                     }
@@ -292,61 +289,6 @@ type alias ScissorBox =
 scissorBox : ScissorBox -> Setting
 scissorBox { left, bottom, width, height } =
     Effect.WebGL.Settings.scissor left bottom width height
-
-
-drawWaterReflection : Bool -> RenderData -> { a | windowSize : Coord Pixels, zoomFactor : Int } -> List Effect.WebGL.Entity
-drawWaterReflection includeSunOrMoon { staticViewMatrix, nightFactor, texture, lights, depth, time, scissors } model =
-    Effect.WebGL.entityWith
-        [ Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
-        , depthTest
-        , blend
-        , scissorBox scissors
-        ]
-        vertexShader
-        fragmentShader
-        starsMesh
-        { view = staticViewMatrix
-        , texture = texture
-        , textureSize = WebGL.Texture.size texture |> Coord.tuple |> Coord.toVec2
-        , color = Vec4.vec4 2 2 2 nightFactor
-        , userId = noUserIdSelected
-        , time = time
-        , night = nightFactor
-        , lights = lights
-        , depth = depth
-        , waterReflection = 1
-        }
-        :: (if includeSunOrMoon then
-                [ Effect.WebGL.entityWith
-                    [ Effect.WebGL.Settings.cullFace Effect.WebGL.Settings.back
-                    , depthTest
-                    , blend
-                    , scissorBox scissors
-                    ]
-                    vertexShader
-                    fragmentShader
-                    (if TimeOfDay.isDayTime nightFactor then
-                        sunMesh
-
-                     else
-                        moonMesh
-                    )
-                    { view = Coord.translateMat4 (TimeOfDay.sunMoonPosition model nightFactor) staticViewMatrix
-                    , texture = texture
-                    , textureSize = WebGL.Texture.size texture |> Coord.tuple |> Coord.toVec2
-                    , color = Vec4.vec4 1 1 1 1
-                    , userId = noUserIdSelected
-                    , time = time
-                    , night = nightFactor
-                    , lights = lights
-                    , depth = depth
-                    , waterReflection = 1
-                    }
-                ]
-
-            else
-                []
-           )
 
 
 vertexShader :
@@ -610,7 +552,6 @@ fragmentShader :
         { u
             | texture : WebGL.Texture.Texture
             , textureSize : Vec2
-            , lights : WebGL.Texture.Texture
             , depth : WebGL.Texture.Texture
             , time : Float
             , color : Vec4
@@ -630,7 +571,6 @@ fragmentShader =
     [glsl|
 precision mediump float;
 uniform sampler2D texture;
-uniform sampler2D lights;
 uniform sampler2D depth;
 uniform float time;
 uniform vec4 color;
@@ -684,16 +624,7 @@ void main () {
                                 ? vec4(secondaryColor2 * 0.8, opacity)
                                 : vec4(textureColor.xyz, opacity);
 
-    vec3 nightColor = vec3(1.0, 1.0, 1.0) * (1.0 - night) + vec3(0.33, 0.4, 0.645) * night;
-
-    float lightHdrAdjustment = (1.0 / 0.95) * (night - 0.05);
-
-    vec3 light =
-        night > 0.5
-            ? (texture2D(lights, vcoord2).xyz * vec3(2.0, 2.0, 1.5) + 1.0) * lightHdrAdjustment
-            : vec3(1.0, 1.0, 1.0);
-
-    gl_FragColor = textureColor2 * vec4(nightColor, 1.0) * vec4(max(light, vec3(1.0, 1.0, 1.0)), 1.0) * color + 0.6 * isSelected * highlight;
+    gl_FragColor = textureColor2 * color + 0.6 * isSelected * highlight;
 }|]
 
 

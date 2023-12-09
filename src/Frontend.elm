@@ -220,15 +220,6 @@ init url key =
             , verticalWrap = Effect.WebGL.Texture.clampToEdge
             , flipY = False
             }
-            "/lights.png"
-            |> Effect.Task.attempt LightsTextureLoaded
-        , Effect.WebGL.Texture.loadWith
-            { magnify = Effect.WebGL.Texture.nearest
-            , minify = Effect.WebGL.Texture.nearest
-            , horizontalWrap = Effect.WebGL.Texture.clampToEdge
-            , verticalWrap = Effect.WebGL.Texture.clampToEdge
-            , flipY = False
-            }
             "/depth.png"
             |> Effect.Task.attempt DepthTextureLoaded
         ]
@@ -271,9 +262,6 @@ updateLoaded audioData msg model =
             ( model, Command.none )
 
         TextureLoaded _ ->
-            ( model, Command.none )
-
-        LightsTextureLoaded _ ->
             ( model, Command.none )
 
         KeyMsg keyMsg ->
@@ -464,14 +452,6 @@ updateLoaded audioData msg model =
             case result of
                 Ok texture ->
                     ( { model | trainTexture = Just texture }, Command.none )
-
-                Err _ ->
-                    ( model, Command.none )
-
-        TrainLightsTextureLoaded result ->
-            case result of
-                Ok texture ->
-                    ( { model | trainLightsTexture = Just texture }, Command.none )
 
                 Err _ ->
                     ( model, Command.none )
@@ -1118,11 +1098,10 @@ canvasView : AudioData -> FrontendLoaded -> Html FrontendMsg_
 canvasView audioData model =
     case
         ( Effect.WebGL.Texture.unwrap model.texture
-        , Effect.WebGL.Texture.unwrap model.lightsTexture
         , Effect.WebGL.Texture.unwrap model.depthTexture
         )
     of
-        ( Just texture, Just lightsTexture, Just depth ) ->
+        ( Just texture, Just depth ) ->
             let
                 viewBounds_ : BoundingBox2d WorldUnit WorldUnit
                 viewBounds_ =
@@ -1146,8 +1125,7 @@ canvasView audioData model =
 
                 renderData : RenderData
                 renderData =
-                    { lights = lightsTexture
-                    , texture = texture
+                    { texture = texture
                     , depth = depth
                     , nightFactor = 0
                     , staticViewMatrix = staticViewMatrix
