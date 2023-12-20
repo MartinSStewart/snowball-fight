@@ -7,7 +7,7 @@ import Array exposing (Array)
 import AssocSet
 import Bytes exposing (Endianness(..))
 import Bytes.Decode
-import Change exposing (AdminChange(..), AdminData, AreTrainsAndAnimalsDisabled(..), LocalChange(..), ServerChange(..), UserStatus(..))
+import Change exposing (AdminChange(..), AdminData, AreTrainsAndAnimalsDisabled(..), LocalChange, ServerChange(..), UserStatus(..))
 import Crypto.Hash
 import Dict
 import Duration exposing (Duration)
@@ -22,9 +22,11 @@ import IdDict
 import Lamdera
 import List.Extra as List
 import List.Nonempty as Nonempty exposing (Nonempty(..))
+import Point2d
 import Quantity
 import SHA224
 import Types exposing (BackendModel, BackendMsg(..), LoadingData_, ToBackend(..), ToFrontend(..))
+import User exposing (FrontendUser)
 
 
 app :
@@ -94,6 +96,7 @@ disconnectClient sessionId clientId model =
                         (Effect.Lamdera.sessionIdToString sessionId)
                         { clientIds = AssocSet.remove clientId session.clientIds
                         , userId = session.userId
+                        , user = { position = Point2d.origin, walkingTowards = Nothing }
                         }
                         model.userSessions
               }
@@ -335,6 +338,28 @@ updateLocalChange sessionId clientId time change model =
         Change.InvalidChange ->
             ( model, InvalidChange, BroadcastToNoOne )
 
+        Change.WalkTowards position ->
+            case Dict.get (Effect.Lamdera.sessionIdToString sessionId) model.userSessions of
+                Just session ->
+                    ( mapUser (\user -> { user | walkingTowards = Just position }) sessionId model
+                    , OriginalChange
+                    , BroadcastToEveryoneElse (ServerWalkTowards session.userId position)
+                    )
+
+                Nothing ->
+                    ( model, InvalidChange, BroadcastToNoOne )
+
+
+mapUser : (FrontendUser -> FrontendUser) -> SessionId -> BackendModel -> BackendModel
+mapUser mapFunc sessionId model =
+    { model
+        | userSessions =
+            Dict.update
+                (Effect.Lamdera.sessionIdToString sessionId)
+                (Maybe.map (\data -> { data | user = mapFunc data.user }))
+                model.userSessions
+    }
+
 
 addSession :
     SessionId
@@ -353,11 +378,13 @@ addSession sessionId clientId model =
                                 Just session ->
                                     { clientIds = AssocSet.insert clientId session.clientIds
                                     , userId = session.userId
+                                    , user = session.user
                                     }
 
                                 Nothing ->
                                     { clientIds = AssocSet.singleton clientId
                                     , userId = Id.fromInt model.userIdCounter
+                                    , user = { position = Point2d.origin, walkingTowards = Nothing }
                                     }
                             )
                                 |> Just
@@ -373,7 +400,7 @@ addSession sessionId clientId model =
                 { userId = userId
                 , users =
                     Dict.toList model.userSessions
-                        |> List.map (\( _, session ) -> ( session.userId, {} ))
+                        |> List.map (\( _, session ) -> ( session.userId, session.user ))
                         |> IdDict.fromList
                 }
                 |> Effect.Lamdera.sendToFrontend clientId

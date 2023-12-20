@@ -43,6 +43,7 @@ type Change
 type LocalChange
     = SelectCharacter
     | InvalidChange
+    | WalkTowards (Point2d WorldUnit WorldUnit)
 
 
 tileHotkeyDict : Dict String TileHotkey
@@ -91,7 +92,8 @@ type AreTrainsAndAnimalsDisabled
 
 type ServerChange
     = ServerUserDisconnected (Id UserId)
-    | ServerUserConnected (Id UserId)
+    | ServerUserConnected (Id UserId) (Point2d WorldUnit WorldUnit)
+    | ServerWalkTowards (Id UserId) (Point2d WorldUnit WorldUnit)
 
 
 type alias MovementChange =

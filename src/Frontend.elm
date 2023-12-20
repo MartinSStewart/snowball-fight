@@ -1,10 +1,10 @@
 module Frontend exposing (app, app_)
 
-import Array
 import AssocList
 import Audio exposing (Audio, AudioCmd, AudioData)
 import BoundingBox2d exposing (BoundingBox2d)
 import Browser
+import Change
 import Color exposing (Color, Colors)
 import Coord exposing (Coord)
 import Dict exposing (Dict)
@@ -19,29 +19,28 @@ import Effect.Task
 import Effect.Time
 import Effect.WebGL exposing (Mesh)
 import Effect.WebGL.Texture
-import Flag
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Html.Events.Extra.Mouse exposing (Button(..))
+import IdDict
 import Json.Decode
-import Json.Encode
 import Keyboard
 import Lamdera
 import List.Nonempty exposing (Nonempty(..))
 import LoadingPage
 import LocalGrid exposing (LocalGrid_)
+import LocalModel
 import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vec2 exposing (Vec2)
-import Math.Vector4 as Vec4
+import Math.Vector4
 import PingData
 import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
 import Ports
 import Quantity exposing (Quantity(..))
 import Random
-import Route exposing (PageRoute(..))
-import Shaders exposing (DebrisVertex, MapOverlayVertex, RenderData)
+import Shaders exposing (RenderData)
 import Sprite exposing (Vertex)
 import TextInput exposing (OutMsg(..))
 import TextInputMultiline
@@ -423,6 +422,10 @@ updateLoaded audioData msg model =
             in
             ( { model2
                 | ui = newUi
+                , localModel =
+                    LocalModel.unwrap model2.localModel
+                        |> (\a -> a)
+                        |> LocalModel.unsafe
                 , previousFocus = model2.focus
                 , focus =
                     if visuallyEqual then
@@ -563,7 +566,10 @@ mainMouseButtonUp audioData mousePosition previousMouseState model =
             ( model2, Command.none )
 
         MapHover ->
-            ( model2, Command.none )
+            LoadingPage.updateLocalModel
+                (Change.WalkTowards (Toolbar.screenToWorld model mousePosition))
+                model
+                |> LoadingPage.handleOutMsg False
 
         UiHover id _ ->
             case sameUiHover of
@@ -756,141 +762,6 @@ setFocus newFocus model =
     { model
         | focus = newFocus
     }
-
-
-createDebrisMesh : Effect.Time.Posix -> List RemovedTileParticle -> Effect.WebGL.Mesh DebrisVertex
-createDebrisMesh appStartTime removedTiles =
-    let
-        list : List RemovedTileParticle
-        list =
-            removedTiles
-                |> List.sortBy
-                    (\{ position, tile } ->
-                        let
-                            ( _, Quantity y ) =
-                                position
-
-                            ( _, Quantity height ) =
-                                Tile.getData tile |> .size
-                        in
-                        y + height
-                    )
-    in
-    List.concatMap
-        (\{ position, tile, time, colors } ->
-            let
-                data =
-                    Tile.getData tile
-            in
-            createDebrisMeshHelper
-                position
-                data.texturePosition
-                data.size
-                colors
-                (case tile of
-                    BigText _ ->
-                        2
-
-                    _ ->
-                        1
-                )
-                appStartTime
-                time
-        )
-        list
-        |> Sprite.toMesh
-
-
-createDebrisMeshHelper :
-    Coord WorldUnit
-    -> Coord unit
-    -> Coord unit
-    -> Colors
-    -> Int
-    -> Effect.Time.Posix
-    -> Effect.Time.Posix
-    -> List DebrisVertex
-createDebrisMeshHelper position texturePosition ( Quantity textureW, Quantity textureH ) colors scale appStartTime time =
-    let
-        primaryColor2 =
-            Color.unwrap colors.primaryColor |> toFloat
-
-        secondaryColor2 =
-            Color.unwrap colors.secondaryColor |> toFloat
-
-        time2 =
-            Duration.from appStartTime time |> Duration.inSeconds
-    in
-    List.concatMap
-        (\x2 ->
-            List.concatMap
-                (\y2 ->
-                    let
-                        ( x3, y3 ) =
-                            Coord.xy x2 y2 |> Coord.multiply Units.tileSize |> Coord.toTuple
-
-                        initialSpeed : Vec2
-                        initialSpeed =
-                            Random.step
-                                (Random.map2
-                                    (\randomX randomY ->
-                                        Vec2.vec2
-                                            ((toFloat x2 + 0.5 - toFloat textureW / 2) * 100 + randomX)
-                                            (((toFloat y2 + 0.5 - toFloat textureH / 2) * 100) + randomY - 100)
-                                    )
-                                    (Random.float -40 40)
-                                    (Random.float -40 40)
-                                )
-                                (Random.initialSeed (Effect.Time.posixToMillis time + x2 * 3 + y2 * 5))
-                                |> Tuple.first
-
-                        ( w, h ) =
-                            Units.tileSize |> Coord.divide (Coord.xy scale scale) |> Coord.toTuple
-
-                        ( tx, ty ) =
-                            Coord.plus (Coord.xy x3 y3 |> Coord.divide (Coord.xy scale scale)) texturePosition |> Coord.toTuple
-
-                        ( x4, y4 ) =
-                            Coord.multiply Units.tileSize position
-                                |> Coord.plus (Coord.xy x3 y3)
-                                |> Coord.toTuple
-
-                        ( width, height ) =
-                            Coord.toTuple Units.tileSize
-                    in
-                    [ { position = Vec2.vec2 (toFloat x4) (toFloat y4)
-                      , texturePosition = toFloat tx + Sprite.textureWidth * toFloat ty
-                      , primaryColor = primaryColor2
-                      , secondaryColor = secondaryColor2
-                      , initialSpeed = initialSpeed
-                      , startTime = time2
-                      }
-                    , { position = Vec2.vec2 (toFloat (x4 + width)) (toFloat y4)
-                      , texturePosition = toFloat (tx + w) + Sprite.textureWidth * toFloat ty
-                      , primaryColor = primaryColor2
-                      , secondaryColor = secondaryColor2
-                      , initialSpeed = initialSpeed
-                      , startTime = time2
-                      }
-                    , { position = Vec2.vec2 (toFloat (x4 + width)) (toFloat (y4 + height))
-                      , texturePosition = toFloat (tx + w) + Sprite.textureWidth * toFloat (ty + h)
-                      , primaryColor = primaryColor2
-                      , secondaryColor = secondaryColor2
-                      , initialSpeed = initialSpeed
-                      , startTime = time2
-                      }
-                    , { position = Vec2.vec2 (toFloat x4) (toFloat (y4 + height))
-                      , texturePosition = toFloat tx + Sprite.textureWidth * toFloat (ty + h)
-                      , primaryColor = primaryColor2
-                      , secondaryColor = secondaryColor2
-                      , initialSpeed = initialSpeed
-                      , startTime = time2
-                      }
-                    ]
-                )
-                (List.range 0 (textureH - 1))
-        )
-        (List.range 0 (textureW - 1))
 
 
 updateFromBackend : ToFrontend -> FrontendModel_ -> ( FrontendModel_, Command FrontendOnly ToBackend FrontendMsg_ )
@@ -1099,9 +970,12 @@ canvasView audioData model =
     case
         ( Effect.WebGL.Texture.unwrap model.texture
         , Effect.WebGL.Texture.unwrap model.depthTexture
+        , ( Maybe.andThen Effect.WebGL.Texture.unwrap model.trainTexture
+          , Maybe.andThen Effect.WebGL.Texture.unwrap model.trainDepthTexture
+          )
         )
     of
-        ( Just texture, Just depth ) ->
+        ( Just texture, Just depth, ( Just playerTexture, Just playerDepth ) ) ->
             let
                 viewBounds_ : BoundingBox2d WorldUnit WorldUnit
                 viewBounds_ =
@@ -1142,6 +1016,10 @@ canvasView audioData model =
                 textureSize : Vec2
                 textureSize =
                     WebGL.Texture.size texture |> Coord.tuple |> Coord.toVec2
+
+                localModel : LocalGrid_
+                localModel =
+                    LocalGrid.localModel model.localModel
             in
             Effect.WebGL.toHtmlWith
                 [ Effect.WebGL.alpha False
@@ -1156,40 +1034,56 @@ canvasView audioData model =
                  ]
                     ++ LoadingPage.mouseListeners model
                 )
-                []
+                ((case IdDict.get localModel.userId localModel.users of
+                    Just user ->
+                        [ Effect.WebGL.entity
+                            Shaders.vertexShader
+                            Shaders.fragmentShader
+                            (playerSprite user.position)
+                            { view = renderData.viewMatrix
+                            , textureSize = textureSize
+                            , time = renderData.time
+                            , texture = playerTexture
+                            , night = 0
+                            , depth = playerDepth
+                            , color = Math.Vector4.vec4 1 1 1 1
+                            }
+                        ]
+
+                    Nothing ->
+                        []
+                 )
+                    ++ [ Effect.WebGL.entity
+                            Shaders.vertexShader
+                            Shaders.fragmentShader
+                            treeSprite
+                            { view = renderData.viewMatrix
+                            , textureSize = textureSize
+                            , time = renderData.time
+                            , texture = renderData.texture
+                            , night = 0
+                            , depth = renderData.depth
+                            , color = Math.Vector4.vec4 1 1 1 1
+                            }
+                       ]
+                )
 
         _ ->
             Html.text ""
 
 
-mapOverlayMesh : Effect.WebGL.Mesh MapOverlayVertex
-mapOverlayMesh =
-    let
-        size =
-            16
-    in
-    List.range 0 (size * size - 1)
-        |> List.concatMap
-            (\index ->
-                let
-                    offset : Vec2
-                    offset =
-                        Vec2.vec2 (toFloat (modBy size index)) (toFloat (index // size))
-                in
-                [ { position = Vec2.vec2 0 0
-                  , offset = offset
-                  }
-                , { position = Vec2.vec2 1 0
-                  , offset = offset
-                  }
-                , { position = Vec2.vec2 1 1
-                  , offset = offset
-                  }
-                , { position = Vec2.vec2 0 1
-                  , offset = offset
-                  }
-                ]
-            )
+treeSprite : Mesh Vertex
+treeSprite =
+    Sprite.sprite (Coord.xy -100 0) (Coord.xy 60 54) (Coord.xy 640 756) (Coord.xy 60 54) |> Sprite.toMesh
+
+
+playerSprite : Point2d WorldUnit WorldUnit -> Mesh Vertex
+playerSprite position =
+    Sprite.sprite
+        (Units.tileToPixelPoint position |> Coord.floorPoint)
+        (Coord.xy 60 70)
+        (Coord.xy 0 0)
+        (Coord.xy 60 70)
         |> Sprite.toMesh
 
 

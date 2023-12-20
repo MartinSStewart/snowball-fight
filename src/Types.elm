@@ -204,7 +204,13 @@ type UiHover
 
 
 type alias BackendModel =
-    { userSessions : Dict Lamdera.SessionId { clientIds : AssocSet.Set ClientId, userId : Id UserId }
+    { userSessions :
+        Dict
+            Lamdera.SessionId
+            { clientIds : AssocSet.Set ClientId
+            , userId : Id UserId
+            , user : FrontendUser
+            }
     , userIdCounter : Int
     }
 

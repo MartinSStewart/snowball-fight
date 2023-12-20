@@ -14,6 +14,7 @@ module Units exposing
     , tileHeight
     , tileSize
     , tileToPixel
+    , tileToPixelPoint
     , tileUnit
     , tileWidth
     )
@@ -69,6 +70,15 @@ cellToTile coord =
 tileToPixel : Coord WorldUnit -> Coord Pixels
 tileToPixel coord =
     Coord.multiply tileSize coord |> Coord.toTuple |> Coord.tuple
+
+
+tileToPixelPoint : Point2d WorldUnit WorldUnit -> Point2d Pixels Pixels
+tileToPixelPoint coord =
+    let
+        { x, y } =
+            Point2d.unwrap coord
+    in
+    Point2d.unsafe { x = x * toFloat (Coord.xRaw tileSize), y = y * toFloat (Coord.yRaw tileSize) }
 
 
 pixelToTile : Coord Pixels -> Coord WorldUnit

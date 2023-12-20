@@ -8,12 +8,16 @@ import Id exposing (Id, UserId)
 import IdDict exposing (IdDict)
 import List.Extra
 import Pixels exposing (Pixels)
+import Point2d exposing (Point2d)
 import Sprite
 import Ui exposing (BorderAndFill(..))
+import Units exposing (WorldUnit)
 
 
 type alias FrontendUser =
-    {}
+    { position : Point2d WorldUnit WorldUnit
+    , walkingTowards : Maybe (Point2d WorldUnit WorldUnit)
+    }
 
 
 type InviteTree

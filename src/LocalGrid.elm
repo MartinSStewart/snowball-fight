@@ -109,6 +109,9 @@ updateLocalChange localChange model =
         SelectCharacter ->
             ( model, NoOutMsg )
 
+        WalkTowards position ->
+            ( model, NoOutMsg )
+
 
 resetUpdateDuration : AdminData -> AdminData
 resetUpdateDuration adminData =
@@ -331,8 +334,33 @@ updateServerChange serverChange model =
             , NoOutMsg
             )
 
-        ServerUserConnected userId ->
-            ( { model | users = IdDict.insert userId {} model.users }
+        ServerUserConnected userId position ->
+            ( { model
+                | users =
+                    IdDict.insert
+                        userId
+                        { position = position
+                        , walkingTowards = Nothing
+                        }
+                        model.users
+              }
+            , NoOutMsg
+            )
+
+        ServerWalkTowards userId position ->
+            ( { model
+                | users =
+                    IdDict.update
+                        userId
+                        (Maybe.map
+                            (\user ->
+                                { position = user.position
+                                , walkingTowards = Just position
+                                }
+                            )
+                        )
+                        model.users
+              }
             , NoOutMsg
             )
 
